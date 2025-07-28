@@ -1,4 +1,4 @@
-# Server in asm
+# Web Server in asm
 ![Platform](https://img.shields.io/badge/OS%20platform%20supported-Linux-green?style=flat)
 
 ![Language](https://img.shields.io/badge/Language-nasm_x86_64-black?style=flat)  
