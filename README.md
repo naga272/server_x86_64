@@ -460,7 +460,7 @@ In questa libreria, è stata dichiarata una classe con i seguenti attributi e me
                 def remove(self, n: int) -> None                        # remove n chars from @self.content
                 def startswith(self, msg: str) -> long int              # verifica che la stringa comincia con msg
                 def endswith(self, msg: str) -> long int                # verifica che la stringa finisce con msg
-                def replace(self, substring: str, rep: str) -> None     # replace a substring of self.content with rep 
+                def replace(self, substring: str, rep: str) -> None     # replace a substring of self.content with rep (ANCORA DA FINIRE) 
                 def __del__(self) -> None                               # delete the String object
 
 
