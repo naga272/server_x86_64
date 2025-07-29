@@ -13,17 +13,17 @@ Lo scopo di questo progetto è capire sul serio come funziona un server web, and
 
 Online si trova tanta roba, ma spesso è confusa, astratta o semplicemente scritta da chi non ha mai davvero messo le mani nel silicio o guardato cosa succede davvero quando una richiesta HTTP arriva.
 
-Personalmente mi ha sempre fatto incazzare il fatto che nessuno spiega chiaramento cosa succede al livello del silicio, quindi ho deciso di scrivermelo da solo nel tentativo di aiutare anche altre persone che sono curiose a capire meglio.
+Personalmente non ho mai sopportato il fatto che nessuno spiega chiaramento cosa succede al livello del silicio, quindi ho deciso di fare della documentazione per conto mio nel tentativo di aiutare anche altre persone che sono curiose a capire meglio come funzionano le cose.
 
 ## **REQUISITI**
 
-- OS **Linux-like** (**quando quelli di Microsoft smetteranno di tenersi la documentazione seria di quei .dll tutta per se', magari farò una versione anche per Windows.**)
+- OS **Linux-like** 
 - assembler **nasm x86_64** (**sudo apt install nasm**)
 - linker **ld** (**sudo apt install binutils**)
 - (opzionale) make (**sudo apt install make**)
 
 Il programma parte dalla procedura _start, che si occupa di salvare all'interno dei puntatori argc, argv, envp gli argomenti passati da linea di comando.
-Il comando GXOR si occupa di azzerare i registri generali della cpu (quindi rax, rbx, rcx, rdx), e' sempre cosa buona e giusta azzerarli a inizio programma.
+Il comando GXOR si occupa di azzerare i registri generali della cpu (quindi rax, rbx, rcx, rdx), e' sempre cosa buona azzerarli a inizio programma.
 
 ```asm
 
@@ -68,7 +68,9 @@ con push rbp e mov rbp, rsp si setta semplicemente lo stack.
 
 ## Creazione socket
 
-Il primo step di cui ci dobbiamo occupare è la creazione di un socket. Per visualizzare meglio il concetto di socket, possiamo vederlo come un tunnel dove i dati vengono instradati verso un qualcosa.
+Il primo step di cui ci dobbiamo occupare è la creazione di un socket. 
+
+Per visualizzare meglio il concetto di socket, possiamo vederlo come un tunnel dove i dati vengono instradati verso un qualcosa.
 
 Ora, passiamo alla chiamata di funzione socket:
 
@@ -108,8 +110,9 @@ socket: ; funzione che restituisce un file descriptor
 ```
 
 La syscall su Linux x86_64 per la creazione di socket è la numero 41.
-una volta passato AF_INET, SOCK_STREAM, TCP a questa syscall viene restituito un file descriptor che identifica quella socket in rax (in pratica, il file descriptor è rappresentato tramite valore numerico intero). In caso di errore, il registro rax avrà un valore negativo, di conseguenza dato che non si è riusciti a creare la socket si fa un jmp all'etichetta .error e permette l'uscita dal programma.
-in C, questo equivale a:
+una volta passato AF_INET, SOCK_STREAM, TCP a questa syscall viene restituito un file descriptor che identifica quella socket in rax (in pratica, il file descriptor è rappresentato tramite valore numerico intero). 
+In caso di errore, il registro rax avrà un valore negativo, di conseguenza dato che non si è riusciti a creare la socket si fa un jmp all'etichetta .error che permette l'uscita dal programma.
+In C questo equivale a:
 
 ```c
 int x = socket(AF_INET, SOCK_STREAM, 0);
@@ -129,7 +132,7 @@ mov r9, rax     ; salvo nel registro r9 il fd
 
 ## Bind
 
-Per avviare una connessione non basta avere un tunnel, bisogna avere anche un'uscita. La funzione bind si occupa proprio di questo, aprire un buco alla fine del tunnel per poter far entrare i dati.
+Per avviare una connessione non basta avere un tunnel, bisogna avere anche un'uscita ed è esattamente quello che fa la funzione bind, che apre un buco alla fine del tunnel per poter far entrare i dati.
 NB: si occupa **SOLO** di aprire la porta al tunnel.
 
 la chiamata di funzione a bind ha bisogno di tre parametri:
@@ -149,10 +152,10 @@ end_sockaddr_in:
 
 ```
 
-- sin_family: è 2 bytes, contiene il tipo di ip che vogliamo usare(1° byte) e il protocollo (2° byte)
+- sin_family: è 2 bytes, contiene il tipo di ip che vogliamo usare(1° byte e in questo caso IPv4) e il protocollo (2° byte)
 - sin_port: 2 bytes, il primo rappresenta la parte alta della porta e l'altro byte la parte basse
 - ip_addr: 4 bytes, ogni byte corrisponde a un ottetto di bit dell'ip
-- padd: è del semplice padding, deve essere di 8 bytes, serve per l'allineamento, è riempito semplicemento con valore 0x00
+- padd: è del semplice padding, deve essere di 8 bytes, usato per l'allineamento ed è riempito semplicemento con valore 0x00
 
 Per ottenere sizeof(sockaddr_in) basta fare:
 
@@ -160,7 +163,7 @@ Per ottenere sizeof(sockaddr_in) basta fare:
 %define len_sockaddr_in end_sockaddr_in - sockaddr_in
 ```
 
-quindi, come parametri alla chiamata bind possiamo passare:
+Quindi, come parametri alla chiamata bind possiamo passare:
 
 ```asm
 mov rdi, r9                     ; socket fd
@@ -169,7 +172,7 @@ mov rdx, len_sockaddr_in        ; sizeof(struct sockadd_in)
 call bind
 ```
 
-la funzione bind è strutturata nel seguente modo:
+La funzione bind è strutturata nel seguente modo:
 
 ```asm
 
@@ -191,7 +194,7 @@ bind:   ; funzione che assegna ip e porta
                 call _exit
 ```
 
-per eseguire bind bisogna chimare la syscall numero 49, che se tutto è andato bene, restituisce nel registro rax il valore 0x00, != in caso di errore.
+Per eseguire bind bisogna chimare la syscall numero 49, che se tutto è andato bene, restituisce nel registro rax il valore 0x00, != in caso di errore.
 
 ## Listen
 Consente alla macchina di mettersi in ascolto su una porta. 
@@ -221,7 +224,7 @@ listen: ; consente a una socket di mettersi in modalita di ascolto per accettare
 ```
 
 La syscall per mettersi in ascolto è la numero 50, e restituisce in rax il valore 0 se è tutto ok, != da 0 in caso di errore.
-quindi la chiamata a funzione è la seguente:
+Quindi la chiamata a funzione è la seguente:
 
 ```asm
 mov rdi, r9     ; socket fd
@@ -231,7 +234,8 @@ call listen
 
 ## Accept
 
-In questa fase, il server rimane in attesa che un client mandi una richiesta, e in caso in cui avviene, comincia ad eserguire delle operazioni. Fino a quel momento, il server rimane in ascolto, non farà assolutamente nulla.
+In questa fase, il server rimane in attesa che un client mandi una richiesta, e nel caso in cui avviene, comincia ad eserguire delle operazioni. 
+Fino a quel momento, il server rimane in ascolto e non farà assolutamente nulla.
 
 I parametri della funzione accept sono:
 
@@ -254,7 +258,7 @@ xor rdx, rdx    ; NULL
 call accept
 ```
 
-passando al corpo della funzione:
+Passando al corpo della funzione:
 
 ```asm
 ; int accept(int sock_fd, struct sockaddr_in* rsi, size_t rdx); 
@@ -277,7 +281,9 @@ accept: ; quando arriva una richiesta, accept restituisce un nuovo fd
 La syscall per accept è la numero 43 e una volta chiamata, il programma si blocca al punto del codice **syscall**.
 Quando invece si connette il client, la syscall restituisce un file descriptor che ha come valore >= 0, < 0 in caso di errore.
 
-Questo file descriptor consente di avere delle informazioni utili come per esempio il percorso che l'utente ha richiesto. Es di contenuto del fd:
+Questo file descriptor consente di avere delle informazioni utili come per esempio il percorso che l'utente ha richiesto. 
+
+Es di contenuto del fd:
 
 ```txt
 GET / HTTP/1.1
@@ -319,6 +325,7 @@ mov r10, rax ; passo il fd del client restituito dalla syscall nel registro r10
 
 Fatto questo, devo usare il multithreading, questo perchè fintantochè il processo figlio elabora la risposta da dare al singolo client, il server deve ritornare subito nella funzione accept() per accettare altri client, altrimenti gli altri non possono fare richieste.
 Per fare questo, si usa la syscall numero 47 fork().
+
 Il processo padre e figlio non condividono i valori dei registri della cpu, sono due processi separati e per distinguerli, gli sviluppatori di linux hanno pensato che quando si ritorna dalla syscall fork il figlio ha nel registro della cpu rax il valore 0, mentre il processo padre ha un valore > 0.
 
 ```asm
@@ -383,8 +390,9 @@ close:  ; chiusura fd
 
 ## STEP SUCCESSIVO (SEND PAGE HTML)
 
-Dato che il codice della funzione main sta diventando grande, è il caso di prendere in considerazione la possibilità di spezzare il codice. N
-el main quindi arriviamo alla fork, e per il codice del figlio assegnamo la funzione childrend_handle
+Dato che il codice della funzione main sta diventando grande, è il caso di prendere in considerazione la possibilità di spezzare il codice. 
+
+Nel main quindi arriviamo alla fork, e per il codice del figlio assegnamo la funzione childrend_handle
 
 ```asm
 
@@ -458,11 +466,9 @@ In questa libreria, è stata dichiarata una classe con i seguenti attributi e me
                 def len(self) -> long int                               # return @self.content length
                 def append(self, msg_to_append: str) -> None            # append msg_to_append to @self.content
                 def remove(self, n: int) -> None                        # remove n chars from @self.content
-                def startswith(self, msg: str) -> long int              # verifica che la stringa comincia con msg
-                def endswith(self, msg: str) -> long int                # verifica che la stringa finisce con msg
-                def replace(self, substring: str, rep: str) -> None     # replace a substring of self.content with rep (ANCORA DA FINIRE) 
+                def startswith(self, msg: str) -> long int              # self.content start with msg?
+                def endswith(self, msg: str) -> long int                # self.content end with msg? 
                 def __del__(self) -> None                               # delete the String object
-
 
 ```
 Per istanziare degli oggetti, basta chiamare la funzione String passando come parametro un puntatore a vettori di caratteri.
@@ -504,9 +510,11 @@ Man mano, aggiungiamo alla variabile di tipo string il contenuto di response usa
         call [rdi + append_str]
 ```
 
-Ora, odbbiamo calcolare la len del file html. 
+Ora, dobbiamo calcolare la len del file html. 
 Per fare questo, ho creato la funzione read_page, che prende come parametro il percorso del file, restituendo nella variabile content_page_ptr un ptr a un oggetto string.
-In content_page_ptr ora abbiamo un problema. i new-line vengono riscritti in "\r\n", quindi considerati due char. 
+In content_page_ptr ora abbiamo un problema:
+
+i new-line vengono riscritti in "\r\n", quindi considerati due char. 
 Invece, Content-Length di response vuole considerati i new-line del body un solo char. 
 Per questo, ho costruito una strlen speciale che non conta il char '\r' del vettore passato come parametro  
 
@@ -548,7 +556,7 @@ Ora, ci basterà passare il contenuto puntato da content_page_ptr a special_strl
         mov rbx, rax
 ```
 
-Fatto questo, dobbiamo converti il numero intero in stringa usando la funzione int_to_str:
+Fatto questo, dobbiamo convertire il numero intero in stringa usando la funzione int_to_str:
 
 ```asm
         ; converto la len in stringa
@@ -574,7 +582,7 @@ Ora, lo standard dello response dopo la length vuole obbligatoriamente due new-l
         call [rdi + append_str]
 ```
 
-E anche il contenuto della pagina html vuole un end-line finale (non deve venir considerato nella length).
+Anche il contenuto della pagina html vuole un end-line finale (non deve venir considerato nella length).
 
 ```asm
         ; aggiungo 0x0d, 0x0a, 0x00 al body 
@@ -583,7 +591,7 @@ E anche il contenuto della pagina html vuole un end-line finale (non deve venir 
         call [rdi + append_str]
 ```
 
-e infine facciamo l'append del contenuto puntato da content_page_ptr in literally_the_response:
+Infine facciamo l'append del contenuto puntato da content_page_ptr in literally_the_response:
 
 ```asm
         ; append del contenuto della pagina html
@@ -593,13 +601,13 @@ e infine facciamo l'append del contenuto puntato da content_page_ptr in literall
         call [rdi + append_str]
 ```
 
-Ora dobbiamo ricalcolare la len di tutto il contenuto di literally_the_response (dobbiamo considerare anche i \r questa volta), per farlo possiamo usare il metodo len, che restituisce in modo efficiente la len del contenuto dell'oggetto:
+Ora dobbiamo ricalcolare la len di tutto il contenuto di literally_the_response (dobbiamo considerare anche i \r questa volta) e per farlo possiamo usare il metodo len, che restituisce in modo efficiente la len del contenuto dell'oggetto:
 ```asm
         mov rdi, [literally_the_response]
         call [rdi + len]
 ```
 
-e restituire la risposta al client:
+Restituisce la risposta al client:
 ```asm
         ; restituisco al client la risposta
         pop r15
@@ -611,7 +619,7 @@ e restituire la risposta al client:
         syscall
 ```
 
-Ora bisogna deallocare le risorse allocate e uccidere il processo figlio:
+Fatto questo, bisogna deallocare le risorse allocate e uccidere il processo figlio:
 ```asm
         mov rdi, r15
         call close
