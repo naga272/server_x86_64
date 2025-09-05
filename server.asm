@@ -226,7 +226,7 @@ get_content_file:
 ;
 ;
 ;
-; string* calculate_response(FILE* rdi)
+; char* calculate_response(FILE* rdi)
 calculate_response:
     STARTFOO
     push r12

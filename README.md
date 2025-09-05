@@ -7,7 +7,7 @@
 
 ![Testing](https://img.shields.io/badge/Test-Pass-green)
 
-## Descrizione
+## **Descrizione**
 
 Lo scopo di questo progetto è capire sul serio come funziona un server web, andando oltre le solite librerie e tutorial pieni di magia nera non spiegata.
 
@@ -15,12 +15,19 @@ Online si trova tanta roba, ma spesso è confusa, astratta o semplicemente scrit
 
 Personalmente mi ha sempre fatto incazzare il fatto che nessuno spiega chiaramento cosa succede al livello del silicio, quindi ho deciso di scrivermelo da solo nel tentativo di aiutare anche altre persone che sono curiose a capire meglio.
 
-## **REQUISITI**
+## **Requisiti**
 
-- OS **Linux-like** (**quando quelli di Microsoft smetteranno di tenersi la documentazione seria di quei .dll tutta per se', magari farò una versione anche per Windows.**)
+- OS **Linux-like**
 - assembler **nasm x86_64** (**sudo apt install nasm**)
 - linker **ld** (**sudo apt install binutils**)
 - (opzionale) make (**sudo apt install make**)
+
+## **Esecuzione**
+
+- assemblare e linkare usando il file ```./build.sh``` (e' importante trovarsi nella stessa directory di server.asm quando si avvia questo file).
+Doposiche eseguire l'eseguibile ```./server```
+
+## **Come funziona**
 
 Il programma parte dalla procedura _start, che si occupa di salvare all'interno dei puntatori argc, argv, envp gli argomenti passati da linea di comando.
 Il comando GXOR si occupa di azzerare i registri generali della cpu (quindi rax, rbx, rcx, rdx), e' sempre cosa buona e giusta azzerarli a inizio programma.
@@ -63,12 +70,14 @@ all'inizio di main possiamo vedere la macro STARTFOO:
 %endmacro
 ```
 
-endbr64: non ha scopi di migliorare l'efficienza del programma, ma di aumentare la sicurezza. Questa istruzione consente di evitare attacchi di tipo ROP e JOP, dove in pratica i malintenzionati senza questa istruzione possono eseguire dei jmp alterando il flusso del codice.
+endbr64: non ha scopi di migliorare l'efficienza del programma, ma di aumentare la sicurezza.
+Questa istruzione consente di evitare attacchi di tipo ROP e JOP, dove in pratica i malintenzionati senza questa istruzione possono eseguire dei jmp alterando il flusso del codice.
 con push rbp e mov rbp, rsp si setta semplicemente lo stack.
 
 ## Creazione socket
 
-Il primo step di cui ci dobbiamo occupare è la creazione di un socket. Per visualizzare meglio il concetto di socket, possiamo vederlo come un tunnel dove i dati vengono instradati verso un qualcosa.
+Il primo step di cui ci dobbiamo occupare è la creazione di un socket.
+Nei os Linux-like, i socket vengono visti come dei file, di conseguenza una socket si usa come si userebbe un file, si usa un fd
 
 Ora, passiamo alla chiamata di funzione socket:
 
@@ -108,7 +117,8 @@ socket: ; funzione che restituisce un file descriptor
 ```
 
 La syscall su Linux x86_64 per la creazione di socket è la numero 41.
-una volta passato AF_INET, SOCK_STREAM, TCP a questa syscall viene restituito un file descriptor che identifica quella socket in rax (in pratica, il file descriptor è rappresentato tramite valore numerico intero). In caso di errore, il registro rax avrà un valore negativo, di conseguenza dato che non si è riusciti a creare la socket si fa un jmp all'etichetta .error e permette l'uscita dal programma.
+una volta passato AF_INET, SOCK_STREAM, TCP a questa syscall viene restituito un file descriptor che identifica quella socket in rax. 
+In caso di errore, il registro rax avrà un valore negativo, di conseguenza dato che non si è riusciti a creare la socket si fa un jmp all'etichetta .error e permette l'uscita dal programma.
 in C, questo equivale a:
 
 ```c
@@ -129,8 +139,7 @@ mov r9, rax     ; salvo nel registro r9 il fd
 
 ## Bind
 
-Per avviare una connessione non basta avere un tunnel, bisogna avere anche un'uscita. La funzione bind si occupa proprio di questo, aprire un buco alla fine del tunnel per poter far entrare i dati.
-NB: si occupa **SOLO** di aprire la porta al tunnel.
+La funzione bind consente di legare il fd del socket a Ip, porta e protocollo
 
 la chiamata di funzione a bind ha bisogno di tre parametri:
 - Il fd del socket
@@ -195,7 +204,7 @@ per eseguire bind bisogna chimare la syscall numero 49, che se tutto è andato b
 
 ## Listen
 Consente alla macchina di mettersi in ascolto su una porta. 
-Accetta backlog richieste in coda, in caso che il numero di richieste in coda viene sorpassato, per il client la macchina sarà irraggiungibile.
+Accetta backlog richieste in coda, in caso che il numero di richieste in coda viene sorpassato, per il client il server sarà irraggiungibile.
 
 ```asm
 
@@ -231,7 +240,8 @@ call listen
 
 ## Accept
 
-In questa fase, il server rimane in attesa che un client mandi una richiesta, e in caso in cui avviene, comincia ad eserguire delle operazioni. Fino a quel momento, il server rimane in ascolto, non farà assolutamente nulla.
+In questa fase, il server rimane in attesa che un client mandi una richiesta, e in caso in cui avviene, comincia ad eserguire delle operazioni.
+Fino a quel momento, il server rimane in ascolto, non farà assolutamente nulla.
 
 I parametri della funzione accept sono:
 
@@ -318,25 +328,31 @@ mov r10, rax ; passo il fd del client restituito dalla syscall nel registro r10
 ```
 
 Fatto questo, devo usare il multithreading, questo perchè fintantochè il processo figlio elabora la risposta da dare al singolo client, il server deve ritornare subito nella funzione accept() per accettare altri client, altrimenti gli altri non possono fare richieste.
-Per fare questo, si usa la syscall numero 47 fork().
-Il processo padre e figlio non condividono i valori dei registri della cpu, sono due processi separati e per distinguerli, gli sviluppatori di linux hanno pensato che quando si ritorna dalla syscall fork il figlio ha nel registro della cpu rax il valore 0, mentre il processo padre ha un valore > 0.
+Per fare questo, ho creato un modulo assembly chiamato thread.asm, che al suo interno contiene le seguenti funzioni:
+
+- create_thread: crea un processo figlio che condivide la memoria col padre.
+        il prototype è:
+
+```C        
+void create_thread(int (fn*)(), ...)
+```
+
+Quindi devi passare un ptr a funzione e se ci sono gli argomenti.
+
+
+- fork: crea un processo nel modo classico, senza CLONE_VM
 
 ```asm
 
-call fork
-test rax, rax
-jz .children    ; il processo figlio salta all'etichetta ".children"
-jmp .loop       ; il processo padre si occupa di ritornare in fase di accept()
-.children:
-        ; il processo figlio si occupa di rispondere al client
-
-        ; ...
-
-        ; una volta risposto il processo figlio deve essere ucciso
-        ; tramite la funzione _exit()
-        mov rdi, 0
-        call _exit
+        mov rdi, children_handle
+        mov rsi, accepted_request
+        mov rdx, rax
+        call create_thread
 ```
+
+quindi, il processo padre riesegue il loop, ritornando ad accettare nuovi client,
+mentre il figlio esegue children_handle che accetta come parametro accepted_request (un messaggio da stampare in output).
+
 
 ## write
 
@@ -354,7 +370,7 @@ syscall
 
 ```
 
-il messaggio response è strutturato nel seguente modo:
+il messaggio response deve essere strutturato nel seguente modo:
 
 ```asm
 response db "HTTP/1.1 200 OK", 13, 10
@@ -383,256 +399,83 @@ close:  ; chiusura fd
 
 ## STEP SUCCESSIVO (SEND PAGE HTML)
 
-Dato che il codice della funzione main sta diventando grande, è il caso di prendere in considerazione la possibilità di spezzare il codice. N
-el main quindi arriviamo alla fork, e per il codice del figlio assegnamo la funzione childrend_handle
+Il processo figlio ha il compito di:
+- leggere dal fd del client (ci servirà più avanti)
+- formulare la risposta per il client
+- restituire la risposta al client
+- liberare la memoria
+- morire (se ne occupa la funzione create_thread)
 
+per formattare la risposta da inviare al client, ho creato la funzione calculate_response:
 ```asm
+; char* calculate_response(FILE* rdi)
+calculate_response:
+    STARTFOO
+    push r12
+    push r13
+    push r14
+    
+    mov rdi, path_index
+    call get_content_file
+    mov r14, rax            ; r14 = content allocato dinamicamente
 
-children_handle: STARTFOO
-        ; resto del codice da eseguire per il processo figlio
-        leave
-        ret
+    ; Calcolo la len del contenuto senza considerare i \r
+    mov rdi, r14
+    call special_strlen
+    mov r13, rax            ; r13 = lunghezza contenuto
 
+    ; ===  BUFFER PER RESPONSE  ===
+    mov rdi, 4096           ; header + spazio per content html
+    add rdi, r13
+    call calloc
+    mov r12, rax
 
-main:   STARTFOO
-        mov rdi, AF_INET
-        mov rsi, SOCK_STREAM
-        mov rdx, TCP
-        call socket
-        mov r9, rax                     ; salvo in r9 il fd
+    ; ORA MI OCCUPO DI COSTRUIRE L'HEADER DEL PACCHETTO
+    mov rdi, r12
+    mov rsi, response.status
+    call strcat
 
-        mov rdi, r9                     ; socket fd
-        mov rsi, sockaddr_in            ; (struct sockaddr_in*) &rsi
-        mov rdx, len_sockaddr_in        ; sizeof(struct sockadd_in)
-        call bind
+    mov rdi, r12
+    mov rsi, response.type
+    call strcat
 
-        mov rdi, r9     ; socket fd
-        mov rsi, 10     ; numero massimo di client che si mettono in coda sul socket
-        call listen     
+    mov rdi, r12
+    mov rsi, response.length
+    call strcat
 
-        push rdi
-        push rsi
-        push rdx
+    ; aggiungo la lunghezza del body
+    mov rdi, r13
+    call int_to_str
+    mov rsi, rax
+    mov rdi, r12
+    call strcat
 
-        mov rdi, msg_after_bind_correct
-        call print
+    push rsi
+    mov rdi, rsi
+    call free
+    pop rsi
 
-        pop rdx
-        pop rsi
-        pop rdi
+    ; aggiungo i due NewLine
+    mov rdi, r12
+    mov rsi, response.head4
+    call strcat
 
-        .loop:  mov rdi, r9
-                xor rsi, rsi
-                xor rdx, rdx
-                call accept     ; int new_fd = accept(fd, NULL, NULL);
-                mov r15, rax
+    ; aggiungo il body
+    mov rdi, r12
+    mov rsi, r14
+    call strcat
 
-                call fork
-                cmp rax, 0x00
-                je .children_do_request
+    ; free content html letto
+    mov rdi, r14
+    call free
 
-                jmp .loop
+    mov rax, r12
 
-                .children_do_request: 
-                        call children_handle
-
-        mov rax, 0
-        leave
-        ret
-```
-
-
-Per continuare col porgramma, abbiamo bisogno di una libreria minimale per la gestione di oggetti di tipo string.
-
-```asm
-%include "./string.asm"
-```
-
-In questa libreria, è stata dichiarata una classe con i seguenti attributi e metodi:
-```python
-
-        String():
-                def __init__(self, msg: str):
-                       self.content = msg
-                       self.size_content = len(msg)
-                def len(self) -> long int                               # return @self.content length
-                def append(self, msg_to_append: str) -> None            # append msg_to_append to @self.content
-                def remove(self, n: int) -> None                        # remove n chars from @self.content
-                def startswith(self, msg: str) -> long int              # verifica che la stringa comincia con msg
-                def endswith(self, msg: str) -> long int                # verifica che la stringa finisce con msg
-                def replace(self, substring: str, rep: str) -> None     # replace a substring of self.content with rep 
-                def __del__(self) -> None                               # delete the String object
-
-
-```
-Per istanziare degli oggetti, basta chiamare la funzione String passando come parametro un puntatore a vettori di caratteri.
-
-```asm
-mov rdi, response.status
-call String
-```
-
-Con questo tipo di dati, possiamo con molta facilità modificare il contenuto di un vettore dinamicamente.
-Quello che dobbiamo fare è ricreare la risposta con gli headers e body basandoci sulla grandezza del file HTML e sul suo contenuto, quindi modifichiamo la struttura response nel seguente modo:
-
-```asm
-response: 
-        .status: db "HTTP/1.1 200 OK", ENDL, 0x00
-        .type:   db "Content-Type: text/html", ENDL, 0x00
-        .length: db "Content-Length: ", 0x00
-        .head4:  db ENDL, ENDL, 0x00
-        .body:   dq 0x00         ; string* che contiene il corpo del file html
-end_response:
-```
-
-Man mano, aggiungiamo alla variabile di tipo string il contenuto di response usando il metodo append dell'oggetto string.
-
-```asm
-        ; Create the string obj and than append the status of response
-        mov rdi, response.status
-        call String
-        mov [literally_the_response], rax ; ptr in .data
-
-        ; append the type of response
-        mov rdi, [literally_the_response]
-        mov rsi, response.type
-        call [rdi + append_str]
-
-        ; append del messaggio "Content-Length: "
-        mov rdi, [literally_the_response]
-        mov rsi, response.length
-        call [rdi + append_str]
-```
-
-Ora, odbbiamo calcolare la len del file html. 
-Per fare questo, ho creato la funzione read_page, che prende come parametro il percorso del file, restituendo nella variabile content_page_ptr un ptr a un oggetto string.
-In content_page_ptr ora abbiamo un problema. i new-line vengono riscritti in "\r\n", quindi considerati due char. 
-Invece, Content-Length di response vuole considerati i new-line del body un solo char. 
-Per questo, ho costruito una strlen speciale che non conta il char '\r' del vettore passato come parametro  
-
-```asm
-; long int special_strlen(char *rdi)
-special_strlen:
-        STARTFOO
-        push rcx
-        push rdi        ; non si sa mai
-        xor rax, rax
-        xor rcx, rcx
-
-        .loop:  prefetcht0[rdi + rax + 128]
-                cmp byte[rdi + rax], 0x00
-                je .done
-
-                cmp byte[rdi + rax], 0x0d
-                je .no_update_rcx
-
-                inc rcx
-        .no_update_rcx:
-                inc rax
-                jmp .loop
-
-        .done:  mov rax, rcx
-                pop rdi
-                pop rcx
-                leave
-                ret
-```
-
-Ora, ci basterà passare il contenuto puntato da content_page_ptr a special_strlen per ottenere la len del body senza considerare i \r:
-
-```asm
-        ; calcolo la len del contenuto
-        mov rdi, [content_page_ptr]
-        mov rdi, [rdi + content]
-        call special_strlen
-        mov rbx, rax
-```
-
-Fatto questo, dobbiamo converti il numero intero in stringa usando la funzione int_to_str:
-
-```asm
-        ; converto la len in stringa
-        ; mov rdi, rax
-        mov rdi, rbx
-        call int_to_str ; restituisce nella variabile DigitSpace la str
-```
-
-e fare un append a literally_the_response:
-```asm
-        ; append il numero a "Content-Length: "                        
-        mov rdi, [literally_the_response]
-        mov rsi, rax
-        call [rdi + append_str]
-```
-
-Ora, lo standard dello response dopo la length vuole obbligatoriamente due new-line:
-
-```asm
-        ; aggiungi due newline per separare header dal body
-        mov rdi, [literally_the_response]
-        mov rsi, response.head4
-        call [rdi + append_str]
-```
-
-E anche il contenuto della pagina html vuole un end-line finale (non deve venir considerato nella length).
-
-```asm
-        ; aggiungo 0x0d, 0x0a, 0x00 al body 
-        mov rdi, [content_page_ptr]
-        mov rsi, endln_str
-        call [rdi + append_str]
-```
-
-e infine facciamo l'append del contenuto puntato da content_page_ptr in literally_the_response:
-
-```asm
-        ; append del contenuto della pagina html
-        mov rdi, [literally_the_response]
-        mov rsi, [content_page_ptr]
-        mov rsi, [rsi + content]
-        call [rdi + append_str]
-```
-
-Ora dobbiamo ricalcolare la len di tutto il contenuto di literally_the_response (dobbiamo considerare anche i \r questa volta), per farlo possiamo usare il metodo len, che restituisce in modo efficiente la len del contenuto dell'oggetto:
-```asm
-        mov rdi, [literally_the_response]
-        call [rdi + len]
-```
-
-e restituire la risposta al client:
-```asm
-        ; restituisco al client la risposta
-        pop r15
-        mov rdx, rax                            ; len msg HTTP
-        mov rdi, r15                            ; fd client
-        mov rsi, [literally_the_response]       ; msg HTTP
-        mov rsi, [rsi + content]
-        mov rax, 1                              ; sysWrite
-        syscall
-```
-
-Ora bisogna deallocare le risorse allocate e uccidere il processo figlio:
-```asm
-        mov rdi, r15
-        call close
-
-        ; libero l'heap prima di uccidere il processo figlio
-        mov rdi, [literally_the_response]
-        call free
-
-        mov rdi, [content_page_ptr]
-        call free 
-
-        ; mov rdi, [str_to_int]
-        ; call free
-
-        mov rdi, file_buffer
-        mov rsi, 0x00
-        mov rdx, 4096
-        call memset
-        
-        mov rdi, EXIT_SUCCESS
-        call _exit
+    pop r14
+    pop r13
+    pop r12
+    leave
+    ret
 ```
 
 
@@ -642,7 +485,7 @@ Ora bisogna deallocare le risorse allocate e uccidere il processo figlio:
 
 ## Tags
 
-nasm ld socket bind accept listen read write syscall Linux server malloc realloc free OOP C++ fork
+nasm ld socket bind accept listen read write syscall Linux server OOP C fork do_clone threading html css
 
 ## author
 
