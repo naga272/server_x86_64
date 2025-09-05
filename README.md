@@ -373,11 +373,13 @@ syscall
 il messaggio response deve essere strutturato nel seguente modo:
 
 ```asm
-response db "HTTP/1.1 200 OK", 13, 10
-         db "Content-Type: text/html", 13, 10
-         db "Content-Length: 53", 13, 10
-         db 13, 10
-         db "<html><body><h1>Lorem Ipsum dolorem</h1></body></html>", 0
+response: 
+        .status: db "HTTP/1.1 200 OK", 13, 10
+        .type:   db "Content-Type: text/html", 13, 10
+        .length: db "Content-Length: 53", 13, 10
+        .head4: db 13, 10
+        .body: db "<html><body><h1>Lorem Ipsum dolorem</h1></body></html>", 0
+end_response:
 ```
 
 **NB**: LA STRUTTURA DEVE AVERE QUESTO FORMATO, E' IMPORTANTISSIMO ALTRIMENTI NON FUNZIONERA'. RISPETTA **TUTTI** I NEW LINE. CONTENT-LENGTH VUOLE LA LEN DEL BODY, ESCLUDENDO I CHAR \r
