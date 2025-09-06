@@ -95,6 +95,7 @@ sockaddr_in:
 
 section .bss
 section .text
+global _start
 
 
 ;offsets struct response
@@ -239,7 +240,7 @@ calculate_response:
 
     ; Calcolo la len del contenuto senza considerare i \r
     mov rdi, r14
-    call special_strlen
+    call strlen
     mov r13, rax            ; r13 = lunghezza contenuto
 
     ; ===  BUFFER PER RESPONSE  ===
@@ -410,13 +411,14 @@ main:
     ret
 
 
-_start: GXOR
-        call main
-        ; mov rdi, 100
-        ; call int_to_str
+_start: 
+    GXOR
+    call main
+    ; mov rdi, 100
+    ; call int_to_str
 
-        mov rdi, rax
-        call _exit
+    mov rdi, rax
+    call _exit
 
 
 %endif

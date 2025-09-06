@@ -130,30 +130,4 @@ strlen: STARTFOO
     ret
 
 
-; long int special_strlen(char *rdi)
-special_strlen:
-    STARTFOO
-    push rcx
-    push rdi        ; non si sa mai
-    xor rax, rax
-    xor rcx, rcx
-
-    .loop:  prefetcht0[rdi + rax + 128]
-            cmp byte[rdi + rax], 0x00
-            je .done
-
-            cmp byte[rdi + rax], 0x0d
-            je .no_update_rcx
-
-            inc rcx
-    .no_update_rcx:
-            inc rax
-            jmp .loop
-
-    .done:  mov rax, rcx
-            pop rdi
-            pop rcx
-            leave
-            ret
-
 %endif
