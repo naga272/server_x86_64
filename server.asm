@@ -64,6 +64,12 @@ section .rodata
         .status: db "HTTP/1.1 200 OK", ENDL, 0x00
         .type:   db "Content-Type: text/html", ENDL, 0x00
         .length: db "Content-Length: ", 0x00
+        ;   OPZIONALI   ;
+        .conn:   db "Connection: keep-alive", ENDL, 0x00
+        .keep:   db "Keep-Alive: timeout=5, max=100", ENDL, 0x00
+        .cache:  db "Cache-Control: public, max-age=31536000", ENDL, 0x00
+        .server: db "Server: AssemblyServer/0.1", ENDL, 0x00
+        ; ------------- ;
         .head4:  db ENDL, ENDL, 0x00
         .body:   dq 0x00         ; string* che contiene il corpo del file html
     end_response:
@@ -291,7 +297,23 @@ calculate_response:
     mov rdi, rsi
     call free
     pop rsi
+    
+    mov rdi, r12
+    mov rsi, response.conn
+    call strcat
 
+    mov rdi, r12
+    mov rsi, response.keep
+    call strcat
+    
+    mov rdi, r12
+    mov rsi, response.cache
+    call strcat
+    
+    mov rdi, r12
+    mov rsi, response.server
+    call strcat
+    
     ; aggiungo i due NewLine
     mov rdi, r12
     mov rsi, response.head4
