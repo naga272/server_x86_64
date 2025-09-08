@@ -154,7 +154,7 @@ sockaddr_in:
         .sin_port:       db 0x23, 0x28          ; 2 bytes (porta 9000 in big endian)
         .ip_addr:        db 127, 0, 0, 1        ; 4 bytes
         .pad:            dq 0x00                ; padding di 8 bytes
-end_sockaddr_in:
+        .end_sockaddr_in:
 
 ```
 
@@ -166,10 +166,10 @@ end_sockaddr_in:
 Per ottenere sizeof(sockaddr_in) basta fare:
 
 ```asm
-%define len_sockaddr_in end_sockaddr_in - sockaddr_in
+%define len_sockaddr_in sockaddr_in.end_sockaddr_in - sockaddr_in
 ```
 
-quindi, come parametri alla chiamata bind possiamo passare:
+Quindi, come parametri alla chiamata bind possiamo passare:
 
 ```asm
 mov rdi, r9                     ; socket fd
@@ -406,7 +406,6 @@ Il processo figlio ha il compito di:
 - formulare la risposta per il client
 - restituire la risposta al client
 - liberare la memoria
-- morire (se ne occupa la funzione create_thread)
 
 per formattare la risposta da inviare al client, ho creato la funzione calculate_response:
 ```asm
@@ -483,7 +482,63 @@ calculate_response:
 
 ## STEP SUCESSIVO: Mostra il contenuto in base al percorso richiesto
 
-**work in progress...**
+Ora dal contenuto del fd del client bisogna ottenere la path richiesta.
+Il contenuto segue il seguente pattern:
+
+```
+GET / HTTP/1.1
+Host: 127.0.0.1:9000
+Connection: keep-alive
+sec-ch-ua: "Not)A;Brand";v="8", "Chromium";v="138", "Google Chrome";v="138"
+sec-ch-ua-mobile: ?0
+sec-ch-ua-platform: "Windows"
+Upgrade-Insecure-Requests: 1
+User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36
+Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7
+Sec-Fetch-Site: none
+Sec-Fetch-Mode: navigate
+Sec-Fetch-User: ?1
+Sec-Fetch-Dest: document
+Accept-Encoding: gzip, deflate, br, zstd
+Accept-Language: it-IT,it;q=0.9
+```
+
+Come si può notare la prima riga contiene il '/', quindi tramite la funzione get_path, vado a estrarre il percorso richiesto e aggiungo il carattere '.' per rendere il percorso del file relativo.
+
+```asm
+    mov rdi, r13        ; contenuto fd_client
+    call get_path
+
+    mov rdi, rax        ; path
+    mov rsi, 46         ; char = '.'
+    call str_prepend
+
+    ; restituisco il contenuto del file in base a quello richiesto
+    mov r14, rax
+    mov rdi, rax
+    call calculate_response
+```
+
+Se la funzione calculate_response non trova il file, formatta la risposta basandosi sul contenuto di './templates/page404.html' e risponde al client:
+
+```
+    mov rdi, rax
+    call strlen
+
+    mov rdx, rax 
+    mov rsi, rdi
+    mov rdi, r12
+    mov rax, 1
+    syscall
+```
+
+Ricapitolando, se si segue i seguenti link
+
+- http://127.0.0.1:9000/templates/index.html
+- http://127.0.0.1:9000/templates/page2.html
+- http://127.0.0.1:9000/templates/page3.html
+
+Il server risponde con successo, altrimenti risponde mostrando la pagina 404 (tranne nel caso '/' a causa di un bug nella funzione get_path che devo sistemare)
 
 ## Tags
 

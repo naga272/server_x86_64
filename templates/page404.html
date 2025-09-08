@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="it">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width,initial-scale=1" />
+        <title>404 error</title>
+        <style>
+            :root{--bsod-blue:#0078D7; --text:#ffffff; --muted:rgba(255,255,255,0.95); --mono: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif}
+            html,body{height:100%;}
+            body{
+            margin:0; height:100%; background:var(--bsod-blue); color:var(--text);
+            font-family:var(--mono); display:flex; align-items:center; justify-content:center; -webkit-font-smoothing:antialiased;
+            }
+
+            .panel{max-width:900px;padding:40px 48px;box-sizing:border-box}
+
+            .sad{font-size:120px;line-height:0.9;margin:0 0 6px 0;font-weight:700}
+            h1{margin:0 0 10px 0;font-size:22px;font-weight:600}
+            p{margin:6px 0;font-size:18px;color:var(--muted)}
+
+            .codeblock{margin-top:18px;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,'Roboto Mono','Courier New',monospace;font-size:15px;background:transparent;color:var(--text);padding:8px 0}
+            .progress{margin-top:12px;font-size:15px}
+
+            .footer{margin-top:18px;font-size:13px;color:rgba(255,255,255,0.9)}
+
+            .qr{width:84px;height:84px;background:#fff;padding:6px;box-sizing:border-box;border-radius:6px;display:grid;grid-template-columns:repeat(5,1fr);grid-auto-rows:1fr;gap:4px}
+            .qr span{display:block;width:100%;height:100%}
+
+            @media (max-width:720px){.sad{font-size:86px}.panel{padding:22px}}
+        </style>
+    </head>
+    <body>
+        <div class="panel" role="main" aria-labelledby="bsod-title">
+            <div class="sad">:(</div><br>
+            <h1 id="bsod-title">Il tuo dispositivo ha riscontrato un problema perchè questa pagina non esiste (error 404).</h1>
+
+            <p>Raccogliamo alcune informazioni sugli errori e poi verrà reindirizzato automaticamente alla home.</p>
+
+            <div class="codeblock" id="dump" aria-live="polite">Sto raccogliendo informazioni: 0% complete</div>
+
+            <div class="progress" id="progress">Completamento: 0%</div>
+
+            <div style="display:flex;align-items:flex-start;gap:18px;margin-top:18px">
+            <div style="flex:1">
+                <div class="footer">STOP CODE: <strong id="stopcode">0x00000404</strong></div>
+                <div class="footer" style="margin-top:6px">Percorso richiesto: <code id="path">/</code></div>
+            </div>
+            <div class="qr" aria-hidden="true" id="qrroot"></div>
+            </div>
+
+            <div style="margin-top:18px;color:rgba(255,255,255,0.9);font-size:13px">Premi un tasto per tornare alla <a href="/templates/index.html" style="color:#fff;text-decoration:underline">home</a>.</div>
+        </div>
+
+        <script>
+            (function(){
+            const dump = document.getElementById('dump');
+            const progress = document.getElementById('progress');
+            const stop = document.getElementById('stopcode');
+            const path = document.getElementById('path');
+            const qr = document.getElementById('qrroot');
+
+            // mostra il path richiesto
+            path.textContent = (location.pathname || '/') + (location.search || '');
+
+            // genera uno stopcode basato sul path (deterministico)
+            function makeStop(p){
+                let h = 2166136261;
+                for(let i=0;i<p.length;i++){
+                h ^= p.charCodeAt(i);
+                h += (h<<1) + (h<<4) + (h<<7) + (h<<8) + (h<<24);
+                }
+                h = (h >>> 0) & 0xFFFFFF;
+                return '0x' + h.toString(16).toUpperCase().padStart(6,'0');
+            }
+            stop.textContent = makeStop(path.textContent);
+
+            // typing/dump effect
+            const lines = [
+                'Stack trace: non disponibile',
+                'Verifica moduli di rete: OK',
+                'Controllo route: fallito',
+                'ID richiesta: ' + Math.floor(Math.random()*900000 + 100000)
+            ];
+
+            let i=0; let pct=0;
+            function step(){
+                if(i < lines.length){
+                dump.textContent = dump.textContent + '\n' + lines[i];
+                i++;
+                setTimeout(step, 600 + Math.random()*600);
+                } else {
+                const t = setInterval(()=>{
+                    pct += Math.ceil(Math.random()*9);
+                    if(pct >= 100){
+                    pct = 100;
+                    progress.textContent = 'Completamento: ' + pct + '% — Reindirizzamento in corso...';
+                    dump.textContent = dump.textContent + '\n\nSalvataggio dump: completato.';
+                    clearInterval(t);
+                    setTimeout(()=> location.href = '/', 900);
+                    } else {
+                    progress.textContent = 'Completamento: ' + pct + '%';
+                    }
+                }, 200);
+                }
+            }
+
+            dump.textContent = '*** Blue Screen 404 Emulator ***\n';
+            setTimeout(step, 500);
+
+            // render qr like pattern
+            function renderQR(seed){
+                const s = seed.split('').reduce((a,c)=>a*31 + c.charCodeAt(0), 7);
+                const bits = [];
+                for(let j=0;j<25;j++) bits.push(((s>>j)&1)!==0);
+                qr.innerHTML = '';
+                bits.forEach(b=>{const sp=document.createElement('span'); sp.style.background = b ? '#000' : '#fff'; qr.appendChild(sp)});
+            }
+            renderQR(stop.textContent);
+
+            // qualsiasi tasto torna home
+            window.addEventListener('keydown', ()=> location.href = '/templates/index.html');
+
+            console.log('%cBSOD 404: pagina non trovata (emulazione).', 'background:#0078D7;color:#fff;padding:6px');
+            })();
+        </script>
+    </body>
+</html>

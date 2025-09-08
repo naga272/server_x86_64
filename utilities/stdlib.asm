@@ -319,10 +319,9 @@ open:
     leave
     ret
     .error_fd:
-        lea rdi, [rel msg_err_open_file]
-        call print
-        mov rdi, EXIT_FAILURE
-        call _exit
+        mov rax, -1
+        leave
+        ret
 
 
 ; void close(long int rdi)

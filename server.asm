@@ -28,7 +28,7 @@
 %include "./utilities/sstring.asm"
 %include "./utilities/thread.asm"
 %include "./utilities/stdio.asm"
-
+%include "./utilities/paths.asm"
 
 %ifndef AF_INET
 %define AF_INET 2               ; IPV4
@@ -68,7 +68,10 @@ section .rodata
         .body:   dq 0x00         ; string* che contiene il corpo del file html
     end_response:
 
-    path_index db "./index.html", 0x00
+    ; path_index  db "/templates/index.html", 0x00
+    ; path_page2  db "./templates/page2.html", 0x00
+    ; path_page3  db "./templates/page3.html", 0x00
+    path_404        db "./templates/page404.html", 0x00
 
 section .data
 
@@ -180,7 +183,7 @@ accept: ; quando arriva una richiesta, accept restituisce un nuovo fd
 ;
 ;
 ;
-; char* get_content_file(char* path, char* container)
+; char* get_content_file(char* path)
 get_content_file:
     STARTFOO
     push rdi
@@ -192,6 +195,9 @@ get_content_file:
     mov rsi, O_RDONLY
     mov rdx, CLASSIS
     call open
+    cmp rax, -1
+    je .page_not_found
+    .continue:
     mov r10, rax
 
     ; max 124000 char per pagina
@@ -215,7 +221,6 @@ get_content_file:
     ;call print
 
     mov rax, r13
-
     pop r13
     pop r10
     pop rdx
@@ -223,28 +228,41 @@ get_content_file:
     pop rdi
     leave
     ret
+    .page_not_found:
+        mov rdi, path_404
+        call print
+ 
+        mov rsi, O_RDONLY
+        mov rdx, CLASSIS
+        call open
+        test rax, rax
+        js .error
+        jmp .continue 
+
+    .error:
+        mov rdi, EXIT_FAILURE
+        call _exit
 ;
 ;
 ;
 ;
-; char* calculate_response(FILE* rdi)
+; char* calculate_response(char* rdi)
 calculate_response:
     STARTFOO
     push r12
     push r13
     push r14
-    
-    mov rdi, path_index
+
+    ; mov rdi, path_index
     call get_content_file
     mov r14, rax            ; r14 = content allocato dinamicamente
 
-    ; Calcolo la len del contenuto senza considerare i \r
     mov rdi, r14
     call strlen
     mov r13, rax            ; r13 = lunghezza contenuto
 
     ; ===  BUFFER PER RESPONSE  ===
-    mov rdi, 4096           ; header + spazio per content html
+    mov rdi, 125000           ; header + spazio per content html
     add rdi, r13
     call calloc
     mov r12, rax
@@ -324,6 +342,10 @@ children_handle:
     mov rax, 0
     syscall
 
+    push rax
+    mov rdi, r13
+    call print 
+    pop rax
     ; Caso errore non mando nessuna risposta
     test rax, rax
     jle .end
@@ -333,9 +355,19 @@ children_handle:
     mov byte[r13 + rax - 1], 0x00
 
     mov rdi, r13
+    call get_path
+    
+    mov rdi, rax
+    mov rsi, 46
+    call str_prepend
+    
+    mov r14, rax
+    mov rdi, rax
     call calculate_response
+
     mov rdi, rax
     call strlen
+
     mov rdx, rax 
     mov rsi, rdi
     mov rdi, r12
@@ -411,12 +443,38 @@ main:
     ret
 
 
-_start: 
+testing:
+    STARTFOO
+
+    call get_path
+    mov r14, rax
+
+    mov rdi, rax
+    mov rsi, 46
+    call str_prepend
+
+    mov rdi, rax
+    call calculate_response
+
+    mov rdi, rax
+    call print
+
+    call free
+
+    mov rdi, r14
+    call free
+
+    leave
+    ret
+
+
+_start:
     GXOR
     call main
     ; mov rdi, 100
     ; call int_to_str
-
+    ; mov rdi, test_path
+    ; call testing
     mov rdi, rax
     call _exit
 
