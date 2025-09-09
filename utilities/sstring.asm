@@ -38,6 +38,7 @@ section .text
 ; void *strcat(char *dest, const char *src)
 ; ret: ptr a dest in rax
 global strcat
+
 strcat:
     STARTFOO
 
@@ -108,26 +109,65 @@ add_nl:
 
 
 ; long int strlen(char *rdi)
-strlen: STARTFOO
+strlen:
+    STARTFOO
+    push rdi
+    push rcx
+    xor rax, rax                        ; offset vettore    
+    .ciclo: 
+        prefetcht0[rdi + rax]           ; sposto nella cache l1
+        vmovdqu ymm0, [rdi + rax]       ; sposto rdi + rax e i 256 bit successivi in ymm0  
+        vpxor ymm1, ymm1, ymm1          ; azzero i bit di ymm1
+        vpcmpeqb ymm2, ymm0, ymm1       ; inserisco in ymm2 il risultato del contronto  
+        vpmovmskb ecx, ymm2              ; ottengo una maschera a 32 bit 
+        test ecx, ecx 
+        jnz .found_zero
+
+        add rax, 32
+        jmp .ciclo
+
+    .found_zero:
+        tzcnt ecx, ecx
+        add rax, rcx
+        
+        pop rcx
+        pop rdi
+        leave
+        ret
+
+
+; int strcmp(char*, char*)
+strcmp:
+    ; se sono uguali restituisce 0
+    STARTFOO
     push rdi
     push rsi
-    push rcx
+    push rdx
 
-    mov rsi, rdi
-    mov al, 0x00
-    mov rcx, 0xffffffffffffffff
-    cld
-    repne scasb
+    .loop:
+        movzx rax, byte[rdi]
+        movzx rdx, byte[rsi]
+        cmp al, dl
+        jne .diff
+        test al, al
+        je .equal
+        inc rdi
+        inc rsi
+        jmp .loop
 
-    not rcx
-    dec rcx
-    mov rax, rcx
+    .diff:
+        ; rax contiene *s1, rdx contiene *s2
+        ; (int)(rax - rdx)
+        sub rax, rdx
+    .end: 
+        pop rdx
+        pop rsi
+        pop rdi
+        leave
+        ret
 
-    pop rcx
-    pop rsi
-    pop rdi
-    leave
-    ret
-
+    .equal:
+        xor rax, rax
+        jmp .end
 
 %endif

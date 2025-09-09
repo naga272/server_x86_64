@@ -74,10 +74,11 @@ section .rodata
         .body:   dq 0x00         ; string* che contiene il corpo del file html
     end_response:
 
-    ; path_index  db "/templates/index.html", 0x00
+    path_index  db "/templates/index.html", 0x00
     ; path_page2  db "./templates/page2.html", 0x00
     ; path_page3  db "./templates/page3.html", 0x00
     path_404        db "./templates/page404.html", 0x00
+    home_path       db "/", 0x00
 
 section .data
 
@@ -236,7 +237,7 @@ get_content_file:
     ret
     .page_not_found:
         mov rdi, path_404
-        call print
+        ; call print
  
         mov rsi, O_RDONLY
         mov rdx, CLASSIS
@@ -364,10 +365,6 @@ children_handle:
     mov rax, 0
     syscall
 
-    push rax
-    mov rdi, r13
-    call print 
-    pop rax
     ; Caso errore non mando nessuna risposta
     test rax, rax
     jle .end
@@ -378,8 +375,15 @@ children_handle:
 
     mov rdi, r13
     call get_path
-    
+
     mov rdi, rax
+    mov rsi, home_path
+    call strcmp
+
+    mov rsi, path_index
+    test rax, rax
+    cmove rdi, rsi
+
     mov rsi, 46
     call str_prepend
     
@@ -502,4 +506,3 @@ _start:
 
 
 %endif
-
