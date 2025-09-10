@@ -373,16 +373,21 @@ syscall
 il messaggio response deve essere strutturato nel seguente modo:
 
 ```asm
-response: 
-        .status: db "HTTP/1.1 200 OK", 13, 10
-        .type:   db "Content-Type: text/html", 13, 10
-        .length: db "Content-Length: 53", 13, 10
-        .head4: db 13, 10
-        .body: db "<html><body><h1>Lorem Ipsum dolorem</h1></body></html>", 0
+response:
+        .status: db "HTTP/1.1 200 OK", ENDL
+        .type:   db "Content-Type: text/html", ENDL
+        .length: db "Content-Length: 53", ENDL
+                ;   OPZIONALI   ;
+        .conn:   db "Connection: keep-alive", ENDL
+        .keep:   db "Keep-Alive: timeout=5, max=100", ENDL
+        .cache:  db "Cache-Control: public, max-age=31536000", ENDL
+        .server: db "Server: AssemblyServer/0.1", ENDL
+        .head4:  db ENDL
+        .body:   db "<html><body><h1>Lorem Ipsum dolorem</h1></body></html>", 0
 end_response:
 ```
 
-**NB**: LA STRUTTURA DEVE AVERE QUESTO FORMATO, E' IMPORTANTISSIMO ALTRIMENTI NON FUNZIONERA'. RISPETTA **TUTTI** I NEW LINE. 
+**NB**: LA STRUTTURA DEVE AVERE QUESTO FORMATO, E' IMPORTANTISSIMO ALTRIMENTI NON FUNZIONERA'. MI RACCOMANDO, RISPETTA **TUTTI I NEW LINE**. 
 
 ## close
 
@@ -399,7 +404,7 @@ close:  ; chiusura fd
 ```
 
 
-## STEP SUCCESSIVO (SEND PAGE HTML)
+## SEND PAGE HTML
 
 Il processo figlio ha il compito di:
 - leggere dal fd del client (ci servirà più avanti)
@@ -480,7 +485,7 @@ calculate_response:
 ```
 
 
-## STEP SUCESSIVO: Mostra il contenuto in base al percorso richiesto
+## Mostra il contenuto in base al percorso richiesto
 
 Ora dal contenuto del fd del client bisogna ottenere la path richiesta.
 Il contenuto segue il seguente pattern:
@@ -537,8 +542,18 @@ Ricapitolando, se si segue i seguenti link
 - http://127.0.0.1:9000/templates/index.html
 - http://127.0.0.1:9000/templates/page2.html
 - http://127.0.0.1:9000/templates/page3.html
+- http://127.0.0.1:9000/templates/page404.html
+- http://127.0.0.1:9000
 
-Il server risponde con successo, altrimenti risponde mostrando la pagina 404 (tranne nel caso '/' a causa di un bug nella funzione get_path che devo sistemare)
+Il server risponde con successo, altrimenti risponde mostrando la pagina 404
+
+## POST request
+
+**prossimamente...**
+
+## Ottimizzazioni SIMD
+
+**prossimamente...**
 
 ## Tags
 

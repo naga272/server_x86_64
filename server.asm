@@ -82,6 +82,9 @@ section .rodata
 
 section .data
 
+argc: dq 0x00
+argv: dq 0x00
+envp: dq 0x00
 
 %ifndef sockaddr_in_start
 %define sockaddr_in_start
@@ -495,6 +498,9 @@ testing:
 
 
 _start:
+    mov [argc], rdi
+    mov [argv], rsi
+    mov [envp], rdx
     GXOR
     call main
     ; mov rdi, 100

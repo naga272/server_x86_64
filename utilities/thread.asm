@@ -145,7 +145,6 @@ fork: endbr64
     ret
 
 
-; do_clone.asm
 ; rdi = funzione da chiamare
 ; rsi = args* (struct con registri/parametri)
 do_clone:
@@ -302,11 +301,5 @@ create_thread:
     leave
     ret
 
-
-; mov rdi, len_struct_args
-; mov rdi, off_rdi
-; mov rdi, foo_test
-; mov rsi, msg_child
-; call create_thread
 
 %endif
