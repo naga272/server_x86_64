@@ -53,12 +53,18 @@ _start: endbr64
 
 
 la funzione main si occupa delle seguenti funzioni:
-- creazione della socket (syscall 41)
-- avvio del bind (syscall 49)
-- listening (syscall 59)
-- accept (syscall 43)
-- read/write dal/sul client (syscall 0/1)
-- close della connessione del client (syscall 3)
+```txt
+creazione della socket (syscall 41)
+avvio del bind (syscall 49)
+listening (syscall 59)
+
+while (True):
+        accept (syscall 43)
+        read dal fd resituito da accept (syscall 0)
+        thread(function, fd_client)
+        close fd client (syscall 3)
+
+```
 
 all'inizio di main possiamo vedere la macro STARTFOO:
 
@@ -387,6 +393,7 @@ response:
 end_response:
 ```
 
+Dove ENDL è una macro che viene sostituita da i caratteri \r e \n (0x0d, 0x0a).
 **NB**: LA STRUTTURA DEVE AVERE QUESTO FORMATO, E' IMPORTANTISSIMO ALTRIMENTI NON FUNZIONERA'. MI RACCOMANDO, RISPETTA **TUTTI I NEW LINE**. 
 
 ## close
@@ -555,9 +562,20 @@ Il server risponde con successo, altrimenti risponde mostrando la pagina 404
 
 **prossimamente...**
 
+
+## Attuale tempo di risposta al client
+
+Alla migliore run impiega 3 millisecondi per ora, ma c'è ancora molto lavoro da fare per renderlo più veloce
+
 ## Tags
 
 nasm ld socket bind accept listen read write syscall Linux server OOP C fork do_clone threading html css
+
+
+## utilities
+
+- https://www.chromium.org/chromium-os/developer-library/reference/linux-constants/syscalls/#x86_64-64-bit
+- https://www.ibm.com/docs/en/zos/3.1.0?topic=functions-clone-create-child-process
 
 ## author
 
