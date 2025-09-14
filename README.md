@@ -700,7 +700,7 @@ nome=lorem&cognome=ipsum
 ```
 
 Di conseguenza, ci basterà parsificare il fd per ottenere il nome e cognome inserito dall'utente
- 
+
 ## Ottimizzazioni SIMD
 
 **prossimamente...**
@@ -717,8 +717,14 @@ nasm ld socket bind accept listen read write syscall Linux server OOP C fork do_
 
 ## utilities
 
-- https://www.chromium.org/chromium-os/developer-library/reference/linux-constants/syscalls/#x86_64-64-bit
-- https://www.ibm.com/docs/en/zos/3.1.0?topic=functions-clone-create-child-process
+- [tabella syscall](https://www.chromium.org/chromium-os/developer-library/reference/linux-constants/syscalls/#x86_64-64-bit)
+- [socket](https://man7.org/linux/man-pages/man2/socket.2.html)
+- [bind](https://man7.org/linux/man-pages/man2/bind.2.html)
+- [listen](https://man7.org/linux/man-pages/man2/listen.2.html)
+- [accept](https://man7.org/linux/man-pages/man2/accept.2.html)
+- [fstat](https://man7.org/linux/man-pages/man3/fstat.3p.html)
+- [clone](https://www.ibm.com/docs/en/zos/3.1.0?topic=functions-clone-create-child-process)
+
 
 ## author
 
