@@ -66,11 +66,10 @@ input:
 
 print:  
     STARTFOO
-    call strlen
-
     push rdx
     push rsi
     push rdi
+    call strlen
 
     mov rdx, rax 
     mov rsi, rdi 
@@ -80,8 +79,8 @@ print:
 
     pop rdi
     pop rsi
-    pop rdx
- 
+    pop rdx 
+
     leave
     ret
 

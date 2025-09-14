@@ -340,25 +340,20 @@ Per fare questo, ho creato un modulo assembly chiamato thread.asm, che al suo in
         il prototype è:
 
 ```C        
-void create_thread(int (fn*)(), ...)
+void create_thread(int (fn*)(), ...);
 ```
 
-Quindi devi passare un ptr a funzione e se ci sono gli argomenti.
+Quindi devi passare un ptr a funzione e gli argomenti (se ci sono).
 
-
-- fork: crea un processo nel modo classico, senza CLONE_VM
-
-```asm
-
-        mov rdi, children_handle
-        mov rsi, accepted_request
-        mov rdx, rax
-        call create_thread
-```
-
-quindi, il processo padre riesegue il loop, ritornando ad accettare nuovi client,
+Quindi, il processo padre riesegue il loop, ritornando ad accettare nuovi client,
 mentre il figlio esegue children_handle che accetta come parametro accepted_request (un messaggio da stampare in output).
 
+```asm
+mov rdi, children_handle
+mov rsi, accepted_request
+mov rdx, rax
+call create_thread
+```
 
 ## write
 
@@ -373,7 +368,6 @@ mov rdi, r10            ; fd client
 mov rsi, response       ; msg HTTP
 mov rax, 1              ; sysWrite
 syscall
-
 ```
 
 il messaggio response deve essere strutturato nel seguente modo:
@@ -390,7 +384,7 @@ response:
         .server: db "Server: AssemblyServer/0.1", ENDL
         .head4:  db ENDL
         .body:   db "<html><body><h1>Lorem Ipsum dolorem</h1></body></html>", 0
-end_response:
+        .end_response:
 ```
 
 Dove ENDL è una macro che viene sostituita da i caratteri \r e \n (0x0d, 0x0a).
@@ -399,7 +393,6 @@ Dove ENDL è una macro che viene sostituita da i caratteri \r e \n (0x0d, 0x0a).
 ## close
 
 Una volta inviato il messaggio al client, bisogna chiudere il suo fd tramite la syscall numero 3 chiamata close().
-
 
 ```asm
 close:  ; chiusura fd 
@@ -410,7 +403,6 @@ close:  ; chiusura fd
         ret
 ```
 
-
 ## SEND PAGE HTML
 
 Il processo figlio ha il compito di:
@@ -419,28 +411,30 @@ Il processo figlio ha il compito di:
 - restituire la risposta al client
 - liberare la memoria
 
-per formattare la risposta da inviare al client, ho creato la funzione calculate_response:
+per formattare la risposta da inviare al client, ho creato la funzione calculate_response, che prende come parametro il file descriptor del client e restituisce un ptr che punta a una zona allocata dinamicamente:
+
 ```asm
-; char* calculate_response(FILE* rdi)
+; char* calculate_response(char* rdi)
 calculate_response:
+    ; restituisce un ptr che punta a una zona allocata dinamicamente.
+    ; questo ptr ha formattata la response completa da dare al client.
     STARTFOO
     push r12
     push r13
     push r14
-    
-    mov rdi, path_index
+
+    ; mov rdi, path_index
     call get_content_file
     mov r14, rax            ; r14 = content allocato dinamicamente
 
-    ; Calcolo la len del contenuto senza considerare i \r
     mov rdi, r14
-    call special_strlen
+    call strlen
     mov r13, rax            ; r13 = lunghezza contenuto
 
     ; ===  BUFFER PER RESPONSE  ===
-    mov rdi, 4096           ; header + spazio per content html
+    mov rdi, 125000           ; header + spazio per content html
     add rdi, r13
-    call calloc
+    call malloc
     mov r12, rax
 
     ; ORA MI OCCUPO DI COSTRUIRE L'HEADER DEL PACCHETTO
@@ -467,7 +461,23 @@ calculate_response:
     mov rdi, rsi
     call free
     pop rsi
+    
+    mov rdi, r12
+    mov rsi, response.conn
+    call strcat
 
+    mov rdi, r12
+    mov rsi, response.keep
+    call strcat
+    
+    mov rdi, r12
+    mov rsi, response.cache
+    call strcat
+    
+    mov rdi, r12
+    mov rsi, response.server
+    call strcat
+    
     ; aggiungo i due NewLine
     mov rdi, r12
     mov rsi, response.head4
@@ -490,6 +500,90 @@ calculate_response:
     leave
     ret
 ```
+
+Funzione get_content_file(char* FILE):
+
+Questa funzione si occupa di ottenere il contenuto di un file, resituendo (se il file esiste) un ptr a una zona allocata dinamicamente.
+
+Analisi step by step:
+
+```asm
+    ; rdi = char* path
+    mov rsi, O_RDONLY
+    mov rdx, CLASSIS
+    call open
+    cmp rax, -1
+    je .page_not_found
+    .continue:
+        ; ...
+```
+
+La funzione open (descritta in stdlib.asm) restituisce -1 nel caso in cui è avvenuto un errore, altriementi resgtituisce un fd > 3 se tutto ok. In questo contesto, se rax == -1, il programma finisce nel branch ```.page_not_found```, creando il fd per la pagina chiamata "page404.html", e ritorna al branch ```.continue```.
+
+Ora, ho bisogno di sapere della grandezza del file, così posso allocare precisamente il numero di bytes che mi servono per contenere tutto il contenuto del file.
+Linux mette a disposizione la syscall no. 5, ```sys_fstat``` che passando il fd, un buffer che contiene la ```struct stat``` restituisce tutte le caratteristiche del file, compreso la sua grandezza.
+
+```c
+struct stat {
+    dev_t     st_dev;        /* 0x00, 8 byte */
+    ino_t     st_ino;        /* 0x08, 8 byte */
+    nlink_t   st_nlink;      /* 0x10, 8 byte */
+    mode_t    st_mode;       /* 0x18, 4 byte */
+    uid_t     st_uid;        /* 0x1C, 4 byte */
+    gid_t     st_gid;        /* 0x20, 4 byte */
+    int       __pad0;        /* 0x24, 4 byte */
+    dev_t     st_rdev;       /* 0x28, 8 byte */
+    off_t     st_size;       /* 0x30, 8 byte (SIZE DEL FILE) */
+    blksize_t st_blksize;    /* 0x38, 8 byte */
+    blkcnt_t  st_blocks;     /* 0x40, 8 byte */
+    struct timespec st_atim; /* 0x48, 16 byte */
+    struct timespec st_mtim; /* 0x58, 16 byte */
+    struct timespec st_ctim; /* 0x68, 16 byte */
+    long __unused[3];        /* 0x78, 24 byte */
+}; // totale: 144 byte
+```
+
+Quindi, ci basta fare:
+```asm
+; ottengo struct stat
+; sizeof(struct stat) = 144 + 1 padding (per sicurezza)
+mov rdi, 145
+call malloc
+mov rsi, rax
+mov rdi, r10    ; fd
+mov rax, 5
+syscall
+
+; [rsi + 0x30] == off_t st_size; // 8 bytes
+mov rdi, [rsi + 0x30]
+call malloc
+mov r13, rax
+
+; la struct stat e' allocata dinamicamente
+; devo liberarla perche' non mi serve piu'
+sub rdi, 0x30
+call free
+```
+
+I 144 bytes (+1 di padding) allocati sono la ```struct fstat```.
+
+Una volta eseguita la syscall, rsi (che punta alla struct) contiene a offset 
+[rsi + 0x30] la len, quindi la passo a rdi e eseguo la malloc.
+
+Dopodichè, leggo il contenuto del fd per il numero preciso di byte:
+
+```
+mov rsi, r13
+mov rdx, r12
+mov rdi, r10
+mov rax, 0
+syscall
+
+mov rdi, r10
+call close
+```
+
+Infine restituisco il ptr al content a rax ed esco dalla funzione
 
 
 ## Mostra il contenuto in base al percorso richiesto
@@ -556,8 +650,57 @@ Il server risponde con successo, altrimenti risponde mostrando la pagina 404
 
 ## POST request
 
-**prossimamente...**
+quando l'utente chiede il file ```./templates/page2.html```, gli viene restituito:
+```html
+<!DOCTYPE html>
+<html lang="it">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>try post request</title>
+        <style>
+        </style>
+    </head>
+    <body>
+        <form action="/templates/index.html" method="post">
+            <input type="text" name="nome" placeholder="nome">
+            <input type="text" name="cognome" placeholder="cognome">
+            <input type="submit">
+        </form>
+    </body>
+</html>
+```
 
+Quando l'utente compila il form e preme il tasto ```submit```, invia al server una richiesta di tipo POST.
+Ovviamente, tutti i dati dell'utente si trovano all'interno del fd che invia ogni volta che fa la richiesta e la cosa non cambia nel caso di richieste di tipo POST. Infatti, i dati che ha inserito nei campi il client si trovano sempre nel fd che viene restituito dalla syscall accept:
+
+```
+POST /templates/index.html HTTP/1.1
+Host: 127.0.0.1:9000
+Connection: keep-alive
+Content-Length: 33
+Cache-Control: max-age=0
+sec-ch-ua: "Chromium";v="140", "Not=A?Brand";v="24", "Google Chrome";v="140"
+sec-ch-ua-mobile: ?0
+sec-ch-ua-platform: "Windows"
+Origin: http://127.0.0.1:9000
+Content-Type: application/x-www-form-urlencoded
+Upgrade-Insecure-Requests: 1
+User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36
+Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7
+Sec-Fetch-Site: same-origin
+Sec-Fetch-Mode: navigate
+Sec-Fetch-User: ?1
+Sec-Fetch-Dest: document
+Referer: http://127.0.0.1:9000/templates/page2.html
+Accept-Encoding: gzip, deflate, br, zstd
+Accept-Language: it-IT,it;q=0.9
+
+nome=lorem&cognome=ipsum
+```
+
+Di conseguenza, ci basterà parsificare il fd per ottenere il nome e cognome inserito dall'utente
+ 
 ## Ottimizzazioni SIMD
 
 **prossimamente...**
@@ -565,7 +708,7 @@ Il server risponde con successo, altrimenti risponde mostrando la pagina 404
 
 ## Attuale tempo di risposta al client
 
-Alla migliore run impiega 3 millisecondi per ora, ma c'è ancora molto lavoro da fare per renderlo più veloce
+Alla migliore run (**in locale**) impiega 3 millisecondi per ora, ma c'è ancora molto lavoro da fare per renderlo più veloce
 
 ## Tags
 

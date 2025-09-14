@@ -113,27 +113,20 @@ strlen:
     STARTFOO
     push rdi
     push rcx
-    xor rax, rax                        ; offset vettore    
-    .ciclo: 
-        prefetcht0[rdi + rax]           ; sposto nella cache l1
-        vmovdqu ymm0, [rdi + rax]       ; sposto rdi + rax e i 256 bit successivi in ymm0  
-        vpxor ymm1, ymm1, ymm1          ; azzero i bit di ymm1
-        vpcmpeqb ymm2, ymm0, ymm1       ; inserisco in ymm2 il risultato del contronto  
-        vpmovmskb ecx, ymm2              ; ottengo una maschera a 32 bit 
-        test ecx, ecx 
-        jnz .found_zero
+    
+    mov rcx, -0x01
+    mov al, 0x00
+    cld
+    repne scasb
 
-        add rax, 32
-        jmp .ciclo
+    mov rax, rcx 
+    not rax
+    dec rax
 
-    .found_zero:
-        tzcnt ecx, ecx
-        add rax, rcx
-        
-        pop rcx
-        pop rdi
-        leave
-        ret
+    pop rcx
+    pop rdi
+    leave
+    ret
 
 
 ; int strcmp(char*, char*)

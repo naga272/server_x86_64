@@ -48,54 +48,73 @@ envp: dq 0x00
 section .bss
 section .text
 global _start
-;
-;
-;
+
+
 ; char* get_content_file(char* path)
 get_content_file:
+    ; restituisce un ptr che punta a una zona allocata dinamicamente.
     STARTFOO
     push rdi
     push rsi 
     push rdx
     push r10
+    push r11
+    push r12
     push r13
+
+    mov r12, 124000
 
     mov rsi, O_RDONLY
     mov rdx, CLASSIS
     call open
     cmp rax, -1
     je .page_not_found
+
     .continue:
-    mov r10, rax
+        mov r10, rax    ; fd
+        
+        ; ottengo struct stat
+        ; sizeof(struct stat) = 144 + 1 padding (per sicurezza)
+        mov rdi, 145
+        call malloc
+        mov rsi, rax
+        mov rdi, r10    ; fd
+        mov rax, 5
+        syscall
 
-    ; max 124000 char per pagina
-    mov rdi, 124000
-    call calloc
-    mov r13, rax
+        ; [rax + 0x30] == off_t st_size; // 8 bytes
+        mov rdi, [rsi + 0x30]
+        call malloc
+        mov r13, rax
 
-    mov rsi, r13
-    mov rdx, 124000
-    mov rdi, r10
-    mov rax, 0
-    syscall
+        ; la struct stat e' allocata dinamicamente
+        ; devo liberarla perche' non mi serve piu'
+        sub rdi, 0x30
+        call free
 
-    ; char* container ora punta al contenuto del file html
-    ; NB: liberare l'heap
+        mov rsi, r13
+        mov rdx, r12
+        mov rdi, r10
+        mov rax, 0
+        syscall
 
-    mov rdi, r10
-    call close
+        mov rdi, r10
+        call close
 
-    ;mov rdi, r13
-    ;call print
+        ;mov rdi, r13
+        ;call print
 
-    mov rax, r13
-    pop r13
-    pop r10
-    pop rdx
-    pop rsi
-    pop rdi
-    leave
-    ret
+        mov rax, r13
+        pop r13
+        pop r12
+        pop r11
+        pop r10
+        pop rdx
+        pop rsi
+        pop rdi
+        leave
+        ret
+
     .page_not_found:
         mov rdi, path_404
         ; call print
@@ -110,12 +129,12 @@ get_content_file:
     .error:
         mov rdi, EXIT_FAILURE
         call _exit
-;
-;
-;
-;
+
+
 ; char* calculate_response(char* rdi)
 calculate_response:
+    ; restituisce un ptr che punta a una zona allocata dinamicamente.
+    ; questo ptr ha formattata la response completa da dare al client.
     STARTFOO
     push r12
     push r13
@@ -132,7 +151,7 @@ calculate_response:
     ; ===  BUFFER PER RESPONSE  ===
     mov rdi, 125000           ; header + spazio per content html
     add rdi, r13
-    call calloc
+    call malloc
     mov r12, rax
 
     ; ORA MI OCCUPO DI COSTRUIRE L'HEADER DEL PACCHETTO
@@ -198,10 +217,7 @@ calculate_response:
     leave
     ret
 
-;
-;
-;
-;
+
 ; void children_handle(char* rdi, long fd_client)
 children_handle:
     STARTFOO
@@ -213,9 +229,8 @@ children_handle:
     ; oltre a 8 byte per il ptr al contenuto del fd,
     ; ho bisogno di 8 bytes per il ptr al contenuto della pagina
     ; html richiesta dal client
-
     mov rdi, 4096
-    call calloc
+    call malloc
     mov r13, rax    ; -> char* content_fd_client
 
     ; lettura dal socket
@@ -224,6 +239,11 @@ children_handle:
     mov rdx, 4096       ; lascia spazio per il null terminator
     mov rax, 0
     syscall
+
+    push rdi
+    mov rdi, rsi
+    call print
+    pop rdi
 
     ; Caso errore non mando nessuna risposta
     test rax, rax
@@ -279,10 +299,10 @@ children_handle:
 
         leave
         ret
-;
-;
-;
-main:   
+
+
+; int main(int rdi, char **rsi)
+main:
     STARTFOO
 
     mov rdi, AF_INET
@@ -309,7 +329,8 @@ main:
     pop rsi
     pop rdi
 
-    .loop:  push r9
+    .loop:
+        push r9
 
         mov rdi, r9
         xor rsi, rsi
@@ -363,12 +384,18 @@ _start:
     mov [envp], rdx
     GXOR
     call main
-    ; mov rdi, 100
-    ; call int_to_str
     ; mov rdi, test_path
     ; call testing
     mov rdi, rax
     call _exit
 
+
+
+foo:
+    STARTFOO
+
+    call foo
+    leave
+    ret
 
 %endif
