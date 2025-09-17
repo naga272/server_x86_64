@@ -70,27 +70,13 @@ default rel
 %define SIGSYS	    31	; Chiamata di sistema non valida
 %define CHILD_STACK_SIZE (16*1024)  ; stack per il figlio
 
+
+%define ECHILD -10
+
 %include "./utilities/stdlib.asm"
+%include "./utilities/mutex.asm"
 
 section .data
-
-clone_args:
-    .flag:          dq CLONE_VM | CLONE_FS | CLONE_FILES | CLONE_SIGHAND
-    .pidfd:         dq 0
-    .child_tid:     dq 0
-    .parent_tid:    dq 0
-    .exit_signal:   dq 0
-    .stack:         dq 0
-    .stack_size:    dq 0
-    .tls:           dq 0
-    .set_tid:       dq 0
-    .set_tid_size:  dq 0
-    .cgroup:        dq 0
-    ; padding per compatibilità con kernel più recenti
-    .pad0:          dq 0
-    .pad1:          dq 0
-    .pad2:          dq 0
-    .end:
 
 args:
     .rdx:       dq 0x00
@@ -131,6 +117,8 @@ section .rodata
 err_clone  db "clone() failed", ENDL, 0
 
 section .bss
+    ; stato terminazione dei figli
+    status resd 1
 section .text
 
 
@@ -170,8 +158,10 @@ do_clone:
     and  rsi, -16                ; allinea a 16
 
     ; flags
-    mov rdi, CLONE_VM | CLONE_SIGHAND | CLONE_FILES | CLONE_FS
-    xor rdx, rdx
+    ; NB: senza SIGCHLD il kernel non li considera "veri e propri figli", li vede
+    ; come dei figliastri di cui vergognarsi
+    mov rdi, CLONE_VM | CLONE_SIGHAND | CLONE_FILES | CLONE_FS | SIGCHLD
+    xor rdx, rdx 
     xor r10, r10
     xor r8, r8
     xor r9, r9
@@ -202,6 +192,15 @@ do_clone:
         push    r15                ; fn_saved
         mov     rbx, r14           ; rbx = args*
 
+        lea     rdi, [rel global_mutex]
+        call    mutex_lock
+        ; un thread alla volta possono accedere
+        ; a thread_alive
+        inc     qword[thread_alive]
+
+        lea     rdi, [rel global_mutex]
+        call    mutex_unlock
+
         ; ripristino i registri
         mov     rdi, [rbx + off_rdi]
         mov     rsi, [rbx + off_rsi]
@@ -228,7 +227,16 @@ do_clone:
         pop     rax
         call    rax
 
-        ; uccido il thread
+        ; uccido il thread e decremento il counter thread
+        lea     rdi, [rel global_mutex]
+        call    mutex_lock
+        ; un thread alla volta possono accedere
+        ; a thread_alive
+        dec     qword[thread_alive]
+
+        lea     rdi, [rel global_mutex]
+        call    mutex_unlock
+
         mov rdi, EXIT_SUCCESS
         call _exit
 
@@ -300,6 +308,45 @@ create_thread:
 
     leave
     ret
+
+
+; pid_t wait4(pid_t pid, int *status, int options, struct rusage *rusage);
+waitpid:
+    ; NB: sys_wait4 corrompe il contenuto dei registri
+    STARTFOO
+    push rdi
+    push rsi
+    push rdx
+    push r10
+
+    mov rax, 61 ; sys_wait4
+    syscall
+
+    pop r10
+    pop rdx
+    pop rsi
+    pop rdi
+    leave
+    ret
+
+
+waitallpid:
+    STARTFOO
+    mov rdi, -1             ; pid = -1 -> qualunque figlio
+    lea rsi, [rel status]   ; puntatore a status
+    xor rdx, rdx            ; options = 0
+    xor r10, r10            ; rusage = NULL
+
+    .loop:
+        ; NB: sys_wait4 corrompe il contenuto dei registri
+        call waitpid
+
+        cmp rax, ECHILD
+        je .done                ; nessun figlio rimasto
+        jmp .loop
+    .done:
+        leave
+        ret
 
 
 %endif
