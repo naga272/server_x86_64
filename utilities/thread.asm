@@ -192,15 +192,6 @@ do_clone:
         push    r15                ; fn_saved
         mov     rbx, r14           ; rbx = args*
 
-        lea     rdi, [rel global_mutex]
-        call    mutex_lock
-        ; un thread alla volta possono accedere
-        ; a thread_alive
-        inc     qword[thread_alive]
-
-        lea     rdi, [rel global_mutex]
-        call    mutex_unlock
-
         ; ripristino i registri
         mov     rdi, [rbx + off_rdi]
         mov     rsi, [rbx + off_rsi]
@@ -226,16 +217,6 @@ do_clone:
         ; e faccio la chiamata
         pop     rax
         call    rax
-
-        ; uccido il thread e decremento il counter thread
-        lea     rdi, [rel global_mutex]
-        call    mutex_lock
-        ; un thread alla volta possono accedere
-        ; a thread_alive
-        dec     qword[thread_alive]
-
-        lea     rdi, [rel global_mutex]
-        call    mutex_unlock
 
         mov rdi, EXIT_SUCCESS
         call _exit

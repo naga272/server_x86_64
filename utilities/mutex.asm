@@ -1,3 +1,4 @@
+
 ; ======================================================================================
 ;
 ; Copyright (c) 2025, Bastianello Federico
@@ -20,12 +21,11 @@
 ;
 ; ======================================================================================
 
-
+; https://man7.org/linux/man-pages/man2/futex.2.html
 
 %ifndef MUTEX_ASM
 %define MUTEX_ASM
 
-; https://man7.org/linux/man-pages/man2/futex.2.html
 %include "./utilities/macro.asm"
 %include "./utilities/stdio.asm"
 %include "./utilities/sstring.asm"
@@ -62,10 +62,6 @@
 %define FUTEX_PRIVATE_FLAG 128
 %endif
 
-section .bss
-    ; 0 = unlocked, 1 = locked
-    global_mutex resd 1
-
 section .text
 
 
@@ -73,26 +69,24 @@ section .text
 mutex_lock:
     STARTFOO
     .spin_try:
-        ; proviamo a prendere il lock: compare-exchange semplice con XCHG
         mov eax, 1
-        lock xchg dword [rdi], eax   ; eax = old_value, *addr = 1
+        lock xchg dword [rdi], eax
         test eax, eax
-        jz .got_lock                 ; se old_value == 0 -> abbiamo acquisito
-
+        jz .got_lock
+    ;   old_value != 0
     .wait_loop:
-        ; se siamo qui, old_value != 0. Prima evitiamo di chiamare futex se valore è già cambiato:
-        mov eax, dword [rdi]        ; eax = *addr
+        mov eax, dword [rdi]
         cmp eax, 1
-        jne .spin_try               ; se non è 1, riprova immediatamente
+        jne .spin_try
 
         ; valore è ancora 1 -> chiamiamo futex WAIT
-        ; syscall: futex(uaddr=rdi, FUTEX_WAIT, val=1, timeout=NULL, NULL, 0)
-        mov rax, 202
+        ; futex(uaddr=rdi, FUTEX_WAIT, val=1, timeout=NULL, NULL, 0)
         mov rsi, FUTEX_WAIT         ; op
         mov edx, 1                  ; val atteso
         xor r10, r10                ; timeout = NULL
         xor r8, r8
         xor r9, r9
+        mov rax, 202
         syscall
         ; futex può ritornare per vari motivi (wake, EINTR, spurious) -> riproviamo
         jmp .spin_try
@@ -103,20 +97,16 @@ mutex_lock:
 
 
 ; void mutex_unlock(int *addr)
-; rdi = indirizzo del mutex
 mutex_unlock:
     STARTFOO
-    ; rilascio: scrivo 0 (non usare XCHG obbligatoriamente)
     mov dword [rdi], 0
-
-    ; sveglia un processo/thread in attesa (al massimo 1)
-    ; syscall: futex(uaddr=rdi, FUTEX_WAKE, nr=1, NULL, NULL, 0)
-    mov rax, 202
-    mov rsi, FUTEX_WAKE
-    mov rdx, 1                  ; sveglia massimo 1
-    xor r10, r10
+    ; futex(uaddr=rdi, FUTEX_WAKE, nr=1, NULL, NULL, 0)
+    mov rsi, FUTEX_WAKE ; op
+    mov rdx, 1          ; sveglia massimo 1
+    xor r10, r10        ; timeout = NULL
     xor r8, r8
     xor r9, r9
+    mov rax, 202
     syscall
     leave
     ret
