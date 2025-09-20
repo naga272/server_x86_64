@@ -15,9 +15,13 @@ section .text
 ; char* str_prepend(char*, char)
 str_prepend:
     STARTFOO
+    push rcx
     push rbx
     push rdi
     push rsi
+    push r15
+
+    mov r15, rdi
 
     mov rbx, rdi        ; rbx = string originale
     movzx rsi, sil      ; rsi = carattere (zero-extended)
@@ -27,34 +31,92 @@ str_prepend:
     call strlen
     add rax, 2          ; +1 char extra, +1 terminatore
 
-    ; alloca
     mov rdi, rax
     call calloc
     push rax
 
     mov rcx, rax        ; rcx = nuova stringa allocata
-    ; scrivi il char davanti
+
+    ; inserisce il char davanti
     mov rdx, rsi
     mov byte [rcx], dl
     inc rcx
 
-    ; copia l’originale
-.copy_loop:
-    mov al, [rbx]
-    mov [rcx], al
-    inc rcx
-    inc rbx
-    test al, al
-    jnz .copy_loop
+    ; copia dell’originale
+    .copy_loop:
+        mov al, [rbx]
+        mov [rcx], al
+        inc rcx
+        inc rbx
+        test al, al
+        jnz .copy_loop
 
-    pop rax
-    pop rsi
-    pop rdi
-    pop rbx
-    leave
-    ret
+        mov rdi, r15 ; elimino il vecchio vettore che ho rimpiazzato col nuovo
+        call free
+
+        pop rax
+        pop r15
+        pop rsi
+        pop rdi
+        pop rbx
+        pop rcx
+        leave
+        ret
 
 
+; char* get_method(char*)
+get_method:
+    STARTFOO
+    push rdi
+    push rdx
+    push rcx
+    push rbx
+    push rsi
+    push r15
+
+    xor rax, rax
+    mov r15, rdi
+    .loop:
+        cmp byte[r15 + rax], 32
+        je .end_loop
+        inc rax
+        jmp .loop
+    .end_loop:
+    
+    inc rax     ; per sicurezza
+    mov rdi, rax
+    call calloc
+
+    mov rsi, rax    ; new char* ptr
+    xor r13, r13
+    xor rcx, rcx
+
+    push r14
+    mov bl, ' '
+    
+    .loop2:
+        cmp byte[r15 + r13], bl
+        je .end_copy
+
+        mov al, byte[r15 + r13]
+        mov byte[rsi + rcx], al
+        inc r13
+        inc rcx
+        jmp .loop2
+    .end_copy:
+        pop r14
+        mov rax, rsi
+        pop r15
+        pop rsi
+        pop rbx
+        pop rcx
+        pop rdx
+        pop rdi
+        leave
+        ret
+
+
+; char* get_method(char*)
 get_path:
     STARTFOO
     push rdi

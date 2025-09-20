@@ -21,11 +21,12 @@ Personalmente mi ha sempre fatto incazzare il fatto che nessuno spiega chiaramen
 - assembler **nasm x86_64** (**sudo apt install nasm**)
 - linker **ld** (**sudo apt install binutils**)
 - (opzionale) make (**sudo apt install make**)
+- lib c sqlite3 (**sudo apt install libsqlite3-dev**)
 
 ## **Esecuzione**
 
 - assemblare e linkare usando il file ```./build.sh``` (e' importante trovarsi nella stessa directory di server.asm quando si avvia questo file).
-Doposiche eseguire l'eseguibile ```./server```
+- Dopo eseguire l'eseguibile generato ```./server```
 
 ## **Come funziona**
 
@@ -647,6 +648,49 @@ Ricapitolando, se si segue i seguenti link
 - http://127.0.0.1:9000
 
 Il server risponde con successo, altrimenti risponde mostrando la pagina 404
+
+## Integrazione DataBase sqlite3
+
+Per vedere come funziona il modulo ./utilities/sqlite3.asm, ho creato un'altro readme dove spiego come funziona.
+
+Ho messo in ```rodata_things.asm``` le variabili globali di tipo rodata solo per comodità. 
+
+Al suo interno ho inserito:
+
+```asm
+; ROBA PER DB
+db_name_file db "./db_utenti.sqlite3", 0x00
+
+table_user:
+        db "CREATE TABLE IF NOT EXISTS user("
+        db      "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        db      "nome varchar(32) NOT NULL,"
+        db      "cognome varchar(32) NOT NULL"
+        db ");", 0x00
+
+formatta_insert: 
+        db "INSERT INTO user(nome, cognome)"
+        db "VALUES (", 0x00
+
+end:    db ");", 0x00
+```
+
+- ```db_name_file```: sarà il nome del db sqlite3 che verrà creato (se non esiste) o aperto.
+- ```table_user```: sarà la tabella che si va a creare (se non e' già stata creata) la tabella user per poi popolarla tramite insert (che vanno create dinamicamente quando l'utente fa richieste di tipo post alla pagina ./templates/page2.html) 
+
+All'intero del file server.asm, ho aggiunto le seguenti righe:
+```asm
+; === START SET database ===
+mov rdi, db_name_file
+lea rsi, [rel db_obj]
+call sqlite3_open
+
+; creo tabella utenti
+mov rdi, [db_obj]
+mov rsi, table_user
+call do_table_sqlite
+; === END SET database ===
+```
 
 ## POST request
 

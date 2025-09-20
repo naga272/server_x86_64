@@ -30,14 +30,8 @@
 %include "./utilities/stdio.asm"
 %include "./utilities/paths.asm"
 %include "./utilities/net.asm"
-
-
-section .rodata
-    path_index  db "/templates/index.html", 0x00
-    ; path_page2  db "./templates/page2.html", 0x00
-    ; path_page3  db "./templates/page3.html", 0x00
-    path_404        db "./templates/page404.html", 0x00
-    home_path       db "/", 0x00
+%include "./utilities/sqlite3.asm"
+%include "./rodata_things.asm"
 
 section .data
 
@@ -46,6 +40,7 @@ argv: dq 0x00
 envp: dq 0x00
 
 section .bss
+    db_obj resq 1
 section .text
 global _start
 
@@ -62,7 +57,7 @@ get_content_file:
     push r12
     push r13
 
-    mov r12, 124000
+    mov r12, 122880
 
     mov rsi, O_RDONLY
     mov rdx, CLASSIS
@@ -131,6 +126,60 @@ get_content_file:
         call _exit
 
 
+; long check_sub_string(char* path, char* substring)
+check_sub_string:
+    STARTFOO
+    push rbx
+    push r12
+    push r13
+
+    mov rbx, rdi        ; rbx = path
+    mov r12, rsi        ; r12 = substring
+    xor rax, rax        ; rax = offset (risultato)
+
+    .outer_loop:
+        mov r13, rbx        ; r13 = current path pointer
+        mov rsi, r12        ; rsi = substring pointer
+
+    .inner_loop:
+        mov dl, [rsi]       ; carica char substring
+        test dl, dl
+        jz .found           ; se fine substring → match trovato
+
+        mov cl, [r13]       ; carica char path
+        test cl, cl
+        jz .not_found       ; fine stringa path → fail
+
+        cmp cl, dl
+        jne .next_char      ; mismatch → ricomincia con path+1
+
+        inc r13
+        inc rsi
+        jmp .inner_loop
+
+    .next_char:
+        inc rbx             ; sposta avanti path
+        inc rax             ; offset++
+        mov cl, [rbx]
+        test cl, cl
+        jz .not_found
+        jmp .outer_loop
+
+    .found:
+        ; offset già in rax
+        jmp .done
+
+    .not_found:
+        mov rax, -1
+
+    .done:
+        pop r13
+        pop r12
+        pop rbx
+        leave
+        ret
+
+
 ; char* calculate_response(char* rdi)
 calculate_response:
     ; restituisce un ptr che punta a una zona allocata dinamicamente.
@@ -139,6 +188,15 @@ calculate_response:
     push r12
     push r13
     push r14
+
+    ; per nessuna ragione al mondo l'utente deve poter inserire roba come
+    ; http://<ip>:<port>/../../file.txt
+    mov rdi, r13
+    mov rsi, sub_path_for_fuck_me
+    call check_sub_string
+    mov rsi, path_404
+    cmp rax, -1
+    cmovle rdi, rsi
 
     ; mov rdi, path_index
     call get_content_file
@@ -305,6 +363,18 @@ children_handle:
 main:
     STARTFOO
 
+    ; === START SET database ===
+    mov rdi, db_name_file
+    lea rsi, [rel db_obj]
+    call sqlite3_open
+
+    ; creo tabella utenti
+    mov rdi, [db_obj]
+    mov rsi, table_user
+    call do_table_sqlite
+    ; === END SET database ===
+
+    ; ora mi occupo di mettere on il web server
     mov rdi, AF_INET
     mov rsi, SOCK_STREAM
     mov rdx, TCP
@@ -317,17 +387,11 @@ main:
     call bind
 
     mov rdi, r9     ; socket fd
-    mov rsi, 1     ; numero massimo di client che si mettono in coda sul socket
+    mov rsi, 20     ; numero massimo di client che si mettono in coda sul socket
     call listen
 
-    push rdi
-    push rsi
-    push rdx
     mov rdi, in_ascolto
     call print
-    pop rdx
-    pop rsi
-    pop rdi
 
     .loop:
         push r9
@@ -341,41 +405,40 @@ main:
         js .loop        ; skip se accept fallisce
 
         mov rdi, children_handle
-        mov rsi, accepted_request
         mov rdx, rax
         call create_thread
 
         pop r9
         jmp .loop
 
+    ; sqlite3_close(db_obj)
+    mov rdi, [db_obj]
+    call sqlite3_close
+
     mov rax, 0
     leave
     ret
 
 
+; ===== SEZIONE TESTING =====
+section .data
+post_req: db "POST /<path> ", 0x00
+section .text
 testing:
     STARTFOO
 
-    call get_path
-    mov r14, rax
-
-    mov rdi, rax
-    mov rsi, 46
-    call str_prepend
-
-    mov rdi, rax
-    call calculate_response
+    mov rdi, post_req
+    call get_method
 
     mov rdi, rax
     call print
 
     call free
 
-    mov rdi, r14
-    call free
-
     leave
     ret
+
+; ===== FINE SEZIONE TESTING =====
 
 
 _start:
@@ -384,7 +447,6 @@ _start:
     mov [envp], rdx
     GXOR
     call main
-    ; mov rdi, test_path
     ; call testing
     mov rdi, rax
     call _exit
