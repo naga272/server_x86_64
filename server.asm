@@ -191,13 +191,21 @@ calculate_response:
 
     ; per nessuna ragione al mondo l'utente deve poter inserire roba come
     ; http://<ip>:<port>/../../file.txt
-    mov rdi, r13
-    mov rsi, sub_path_for_fuck_me
-    call check_sub_string
-    mov rsi, path_404
-    cmp rax, -1
-    cmovle rdi, rsi
+    ; mov rdi, r13
+    ; mov rsi, sub_path_for_fuck_me
+    ; call check_sub_string
+    ; mov rsi, path_404
+    ; cmp rax, -1
 
+    ; se rax == -1 -> substring '..' not found -> continua normale
+    ; cmp rax, -1
+    ; je .ok_path
+
+    ; trovata -> forza path_404
+    ; mov rdi, path_404
+
+    ; .ok_path:
+    
     ; mov rdi, path_index
     call get_content_file
     mov r14, rax            ; r14 = content allocato dinamicamente
