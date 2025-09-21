@@ -25,10 +25,23 @@ Personalmente mi ha sempre fatto incazzare il fatto che nessuno spiega chiaramen
 
 ## **Esecuzione**
 
-- assemblare e linkare usando il file ```./build.sh``` (e' importante trovarsi nella stessa directory di server.asm quando si avvia questo file).
+- Assemblare e linkare usando il file ```./build.sh``` (e' importante trovarsi nella stessa directory di server.asm quando si avvia questo file).
 - Dopo eseguire l'eseguibile generato ```./server```
 
 ## **Come funziona**
+
+Questo progetto si basa su alcuni moduli descritti in /utilities/:
+
+- ```macro.asm```: macro di utilità generale come ```STARTFOO```, ```GXOR```, ```GPUSH```, ```GPOP```, ```stdin```, ```stdout```, ...
+- ```mutex.asm```: usato per la mutua esclusione, contiene ```mutex_lock``` e ```mutex_unlock```
+- ```net.asm```: contiene funzione ```socket```, ```bind```, ```listen```, ```accept```, ```struct sockaddr_in```
+- ```paths.asm```: parsing del fd_client
+- ```patricia_tree.asm```: **Non ancora finito**, usato per il routing delle pagine
+- ```sqlite3.asm```: libreria usata per interagire col db tipologia sqlite3
+- ```sstring.asm (static string)```: usato per operazioni elementari sui char
+- ```stdio.asm```: usato per lo standard input output, contiene funzioni come ```input```, ```print```, ```print_int```, ```int_to_str```
+- ```stdlib.asm```: usato per ```malloc```, ```calloc```, ```realloc```, ```free```, ```open```, ```close```
+- ```thread.asm```: usato per la creazione di thread con ```create_thread```, contiene in oltre funzioni come ```fork```, ```waitpid``` e ```waitallpid```
 
 Il programma parte dalla procedura _start, che si occupa di salvare all'interno dei puntatori argc, argv, envp gli argomenti passati da linea di comando.
 Il comando GXOR si occupa di azzerare i registri generali della cpu (quindi rax, rbx, rcx, rdx), e' sempre cosa buona e giusta azzerarli a inizio programma.
@@ -361,7 +374,6 @@ call create_thread
 Il processo figlio ha il compito di rispondere al client, nel nostro caso restituisce del testo HTML.
 
 ```asm
-
 mov rdi, response
 call strlen             ; calcolo la lunghezza del vettore di char "response"
 mov rdx, rax            ; len msg response
@@ -651,7 +663,7 @@ Il server risponde con successo, altrimenti risponde mostrando la pagina 404
 
 ## Integrazione DataBase sqlite3
 
-Per vedere come funziona il modulo ./utilities/sqlite3.asm, ho creato un'altro readme dove spiego come funziona.
+Per vedere come funziona il modulo ./utilities/sqlite3.asm, ho creato un'altro readme dove spiego come funziona (vai al link indicato nella sezione README.md).
 
 Ho messo in ```rodata_things.asm``` le variabili globali di tipo rodata solo per comodità. 
 
@@ -759,7 +771,7 @@ Alla migliore run (**in locale**) impiega 3 millisecondi per ora, ma c'è ancora
 nasm ld socket bind accept listen read write syscall Linux server OOP C fork do_clone threading html css
 
 
-## utilities
+## Utilities
 
 - [tabella syscall](https://www.chromium.org/chromium-os/developer-library/reference/linux-constants/syscalls/#x86_64-64-bit)
 - [socket](https://man7.org/linux/man-pages/man2/socket.2.html)
@@ -768,7 +780,7 @@ nasm ld socket bind accept listen read write syscall Linux server OOP C fork do_
 - [accept](https://man7.org/linux/man-pages/man2/accept.2.html)
 - [fstat](https://man7.org/linux/man-pages/man3/fstat.3p.html)
 - [clone](https://www.ibm.com/docs/en/zos/3.1.0?topic=functions-clone-create-child-process)
-
+- [asm sqlite3](https://github.com/naga272/5AI/tree/naga272/anagrafica/sqlite_asm)
 
 ## author
 
