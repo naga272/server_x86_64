@@ -96,6 +96,14 @@ con push rbp e mov rbp, rsp si setta semplicemente lo stack.
 
 ## Creazione socket
 
+### Definizione formale
+```asm
+    ; Nel kernel Linux, un socket è una rappresentazione strutturata 
+    ; (struct socket) di un endpoint di comunicazione gestito dal sottosistema di rete,
+    ; interfacciato al VFS come file e associato a un’implementazione di protocollo
+    ; (struct sock) attraverso operazioni definite in struct proto_ops
+```
+
 Il primo step di cui ci dobbiamo occupare è la creazione di un socket.
 Nei os Linux-like, i socket vengono visti come dei file, di conseguenza una socket si usa come si userebbe un file, si usa un fd
 
@@ -158,6 +166,15 @@ mov r9, rax     ; salvo nel registro r9 il fd
 ```
 
 ## Bind
+### Definizione formale
+
+```asm
+    ; Nel kernel Linux, bind è l’operazione che associa
+    ; un socket a un indirizzo locale del sistema,
+    ; registrando nella struttura sock i parametri di indirizzamento (IP, porta o path)
+    ; e inserendo il socket nelle tabelle di binding del protocollo,
+    ; rendendolo identificabile all’interno dello stack di rete.
+```
 
 La funzione bind consente di legare il fd del socket a Ip, porta e protocollo
 
@@ -223,6 +240,15 @@ bind:   ; funzione che assegna ip e porta
 per eseguire bind bisogna chimare la syscall numero 49, che se tutto è andato bene, restituisce nel registro rax il valore 0x00, != in caso di errore.
 
 ## Listen
+
+### Definizione formale
+```asm
+    ; Nel kernel Linux, listen è l’operazione che trasforma un socket
+    ; precedentemente associato a un indirizzo in un endpoint passivo,
+    ; configurando le code di connessioni (accept queue) e modificando
+    ; lo stato interno della struct sock in modalità di ascolto,
+    ; così che il protocollo possa accodare richieste di connessione entranti.
+```
 Consente alla macchina di mettersi in ascolto su una porta. 
 Accetta backlog richieste in coda, in caso che il numero di richieste in coda viene sorpassato, per il client il server sarà irraggiungibile.
 
@@ -260,6 +286,15 @@ call listen
 
 ## Accept
 
+### Definizione formale
+
+```asm
+    ; Nel kernel Linux, accept è l’operazione che estrae una connessione
+    ; completata dalla coda di ascolto di un socket passivo,
+    ; istanzia una nuova struct socket e una nuova struct sock per il canale stabilito,
+    ; e restituisce al processo un nuovo file descriptor rappresentante il socket
+    ; figlio dedicato alla comunicazione con il peer remoto.
+```
 In questa fase, il server rimane in attesa che un client mandi una richiesta, e in caso in cui avviene, comincia ad eserguire delle operazioni.
 Fino a quel momento, il server rimane in ascolto, non farà assolutamente nulla.
 
@@ -785,3 +820,4 @@ nasm ld socket bind accept listen read write syscall Linux server OOP C fork do_
 ## author
 
 - naga272
+
