@@ -3,9 +3,9 @@
 
 section .rodata
 
-    path_index  db "/templates/index.html", 0x00
-    ; path_page2  db "./templates/page2.html", 0x00
-    ; path_page3  db "./templates/page3.html", 0x00
+    path_index      db "/templates/index.html", 0x00
+    path_page2      db "./templates/page2.html", 0x00
+    path_page3      db "./templates/page3.html", 0x00
     path_404        db "./templates/page404.html", 0x00
     home_path       db "/", 0x00
 
@@ -28,5 +28,24 @@ section .rodata
         db "VALUES (", 0x00
  
     end:        db ");", 0x00
+
+
+section .data
+
+    cache_index: 
+        dq 0x00
+        dq 0x00
+
+    cache_page2: 
+        dq 0x00
+        dq 0x00
+
+    cache_page3: 
+        dq 0x00
+        dq 0x00
+    
+    cache_404: 
+        dq 0x00
+        dq 0x00
 
 %endif

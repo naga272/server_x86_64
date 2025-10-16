@@ -8,6 +8,41 @@
 	js .error
 %endmacro
 
+%ifndef AF_INET
+%define AF_INET 2               ; IPV4
+%endif
+
+%ifndef SOCK_STREAM
+%define SOCK_STREAM 1           ; tipo socket
+%endif
+
+%ifndef TCP
+%define TCP 6                   ; protocollo TCP
+%endif
+
+%ifndef UDP
+%define UDP 17                  ; protocollo UDP
+%endif
+
+; ==== FLAGS DA USARE IN setsockopt ====
+
+%ifndef TCP_NODELAY
+; ordini al kernel di inviare subito ogni pacchetto senza buffering.
+; Risultato: Latenza ridotta ma se usato per inviare molti pacchetti piccoli viene ridotta l'efficienza
+%define TCP_NODELAY 1
+%endif
+
+%ifndef SO_REUSEPORT
+; utile se si usa piu' processi/thread per accettare connessioni sullo stesso porta,
+; aumenta il parallelismo.
+%define SO_REUSEPORT 15
+%endif
+
+%ifndef SO_REUSEADDR
+; permette di riusare subito lo stesso socket dopo il close.
+%define SO_REUSEADDR 2
+%endif
+
 
 section .rodata
     neg_res_sock            db "errore nel tantito di creare una socket", ENDL, 0x00
@@ -47,22 +82,7 @@ section .rodata
 
 section .data
 
-%ifndef AF_INET
-%define AF_INET 2               ; IPV4
-%endif
-
-%ifndef SOCK_STREAM
-%define SOCK_STREAM 1           ; tipo socket
-%endif
-
-%ifndef TCP
-%define TCP 6                   ; protocollo TCP
-%endif
-
-%ifndef IPPROTO_UDP
-%define IPPROTO_UDP 17          ; protocollo UDP
-%endif
-
+; ==== STRUCT SOCKADDR_IN ====
 %ifndef sockaddr_in_start
 %define sockaddr_in_start
 
@@ -101,6 +121,20 @@ socket:
             call print
             mov rdi, EXIT_FAILURE
             call _exit
+
+
+; long setsockopt(long sockfd, long level, long optname, const void *optval, socklen_t optlen);
+setsockopt:
+    ; La syscall serve a modificare comportamenti del socket a vari livelli
+    STARTFOO
+    push rdi
+
+    mov rax, 54
+    syscall
+
+    pop rdi
+    leave
+    ret
 
 
 ; int bind(int sock_fd, struct sockaddr_in* rsi, size_t rdx);

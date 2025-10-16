@@ -22,6 +22,7 @@ Personalmente mi ha sempre fatto incazzare il fatto che nessuno spiega chiaramen
 - linker **ld** (**sudo apt install binutils**)
 - (opzionale) make (**sudo apt install make**)
 - lib c sqlite3 (**sudo apt install libsqlite3-dev**)
+- Supporto CPU per operazioni AVX2
 
 ## **Esecuzione**
 
@@ -98,10 +99,10 @@ con push rbp e mov rbp, rsp si setta semplicemente lo stack.
 
 ### Definizione formale
 ```asm
-    ; Nel kernel Linux, un socket è una rappresentazione strutturata 
-    ; (struct socket) di un endpoint di comunicazione gestito dal sottosistema di rete,
-    ; interfacciato al VFS come file e associato a un’implementazione di protocollo
-    ; (struct sock) attraverso operazioni definite in struct proto_ops
+; Nel kernel Linux, un socket è una rappresentazione strutturata 
+; (struct socket) di un endpoint di comunicazione gestito dal sottosistema di rete,
+; interfacciato al VFS come file e associato a un’implementazione di protocollo
+; (struct sock) attraverso operazioni definite in struct proto_ops
 ```
 
 Il primo step di cui ci dobbiamo occupare è la creazione di un socket.
@@ -169,11 +170,11 @@ mov r9, rax     ; salvo nel registro r9 il fd
 ### Definizione formale
 
 ```asm
-    ; Nel kernel Linux, bind è l’operazione che associa
-    ; un socket a un indirizzo locale del sistema,
-    ; registrando nella struttura sock i parametri di indirizzamento (IP, porta o path)
-    ; e inserendo il socket nelle tabelle di binding del protocollo,
-    ; rendendolo identificabile all’interno dello stack di rete.
+; Nel kernel Linux, bind è l’operazione che associa
+; un socket a un indirizzo locale del sistema,
+; registrando nella struttura sock i parametri di indirizzamento (IP, porta o path)
+; e inserendo il socket nelle tabelle di binding del protocollo,
+; rendendolo identificabile all’interno dello stack di rete.
 ```
 
 La funzione bind consente di legare il fd del socket a Ip, porta e protocollo
@@ -243,11 +244,11 @@ per eseguire bind bisogna chimare la syscall numero 49, che se tutto è andato b
 
 ### Definizione formale
 ```asm
-    ; Nel kernel Linux, listen è l’operazione che trasforma un socket
-    ; precedentemente associato a un indirizzo in un endpoint passivo,
-    ; configurando le code di connessioni (accept queue) e modificando
-    ; lo stato interno della struct sock in modalità di ascolto,
-    ; così che il protocollo possa accodare richieste di connessione entranti.
+; Nel kernel Linux, listen è l’operazione che trasforma un socket
+; precedentemente associato a un indirizzo in un endpoint passivo,
+; configurando le code di connessioni (accept queue) e modificando
+; lo stato interno della struct sock in modalità di ascolto,
+; così che il protocollo possa accodare richieste di connessione entranti.
 ```
 Consente alla macchina di mettersi in ascolto su una porta. 
 Accetta backlog richieste in coda, in caso che il numero di richieste in coda viene sorpassato, per il client il server sarà irraggiungibile.
@@ -289,11 +290,11 @@ call listen
 ### Definizione formale
 
 ```asm
-    ; Nel kernel Linux, accept è l’operazione che estrae una connessione
-    ; completata dalla coda di ascolto di un socket passivo,
-    ; istanzia una nuova struct socket e una nuova struct sock per il canale stabilito,
-    ; e restituisce al processo un nuovo file descriptor rappresentante il socket
-    ; figlio dedicato alla comunicazione con il peer remoto.
+; Nel kernel Linux, accept è l’operazione che estrae una connessione
+; completata dalla coda di ascolto di un socket passivo,
+; istanzia una nuova struct socket e una nuova struct sock per il canale stabilito,
+; e restituisce al processo un nuovo file descriptor rappresentante il socket
+; figlio dedicato alla comunicazione con il peer remoto.
 ```
 In questa fase, il server rimane in attesa che un client mandi una richiesta, e in caso in cui avviene, comincia ad eserguire delle operazioni.
 Fino a quel momento, il server rimane in ascolto, non farà assolutamente nulla.
@@ -462,10 +463,11 @@ Il processo figlio ha il compito di:
 per formattare la risposta da inviare al client, ho creato la funzione calculate_response, che prende come parametro il file descriptor del client e restituisce un ptr che punta a una zona allocata dinamicamente:
 
 ```asm
-; char* calculate_response(char* rdi)
+; char* && size_t calculate_response(char* rdi)
 calculate_response:
     ; restituisce un ptr che punta a una zona allocata dinamicamente.
     ; questo ptr ha formattata la response completa da dare al client.
+    ; oltre al ptr (restituito in rax), restituisce in rdx la len di rax
     STARTFOO
     push r12
     push r13
@@ -475,13 +477,11 @@ calculate_response:
     call get_content_file
     mov r14, rax            ; r14 = content allocato dinamicamente
 
-    mov rdi, r14
-    call strlen
-    mov r13, rax            ; r13 = lunghezza contenuto
-
     ; ===  BUFFER PER RESPONSE  ===
-    mov rdi, 125000           ; header + spazio per content html
-    add rdi, r13
+    mov rdi, rdx            ; len(content html)
+    add rdi, 4096           ; header
+    push rdi                ; len(header + content)
+
     call malloc
     mov r12, rax
 
@@ -540,6 +540,8 @@ calculate_response:
     mov rdi, r14
     call free
 
+    pop rdi
+    mov rdx, rdi
     mov rax, r12
 
     pop r14
@@ -658,29 +660,40 @@ Accept-Language: it-IT,it;q=0.9
 ```
 
 Come si può notare la prima riga contiene il '/', quindi tramite la funzione get_path, vado a estrarre il percorso richiesto e aggiungo il carattere '.' per rendere il percorso del file relativo.
+Sia get_path che str_prepend restituiscono puntatori che puntano a vettori allocati dinamicamente, quindi li devo salvare all'interno dello stack in modo che quando non mi servono più, libero l'heap
 
 ```asm
     mov rdi, r13        ; contenuto fd_client
     call get_path
+    mov rdi, rax
+    push rdi            ; rbp + 8, path richiesto
+
+    mov rsi, home_path
+    call strcmp
+    
+    mov rsi, path_index
+    test rax, rax
+    cmove rdi, rsi
 
     mov rdi, rax        ; path
     mov rsi, 46         ; char = '.'
     call str_prepend
+    push rax            ; rbp + 16, path richiesto con aggiunto il '.'
 
     ; restituisco il contenuto del file in base a quello richiesto
     mov r14, rax
     mov rdi, rax
     call calculate_response
+
+    mov r13, rax        ; r13 = *ptr->heap
+    mov r14, rdx        ; r14 = len(*ptr->heap)
 ```
 
 Se la funzione calculate_response non trova il file, formatta la risposta basandosi sul contenuto di './templates/page404.html' e risponde al client:
 
-```
-    mov rdi, rax
-    call strlen
-
-    mov rdx, rax 
-    mov rsi, rdi
+```asm
+    mov rdx, r14 ; r14 = len(*ptr->heap)
+    mov rsi, r13 ; r13 = *ptr->heap
     mov rdi, r12
     mov rax, 1
     syscall
@@ -792,18 +805,54 @@ nome=lorem&cognome=ipsum
 
 Di conseguenza, ci basterà parsificare il fd per ottenere il nome e cognome inserito dall'utente
 
+
 ## Ottimizzazioni SIMD
 
-**prossimamente...**
+Ho ottimizzato per ora solo il calcolo della lunghezza di una stringa usando
+le istruzioni della famiglia AVX2
 
+## Altri tipi di ottimizzazioni
+
+E' possibile ridurre la latenza usando la syscall setsockopt, passando il flag TCP_NODEALY:
+
+```asm
+    sub rsp, 4
+    mov dword[rbp + 20], 1                              ; int on = 1;
+
+    mov rdi, [fd_sock]                                  ; fd socket server
+    mov rsi, TCP                                        ; Tipo di connessione
+    mov rdx, TCP_NODELAY | SO_REUSEPORT | SO_REUSEADDR
+    mov r10, rbp                                        ; address stack on
+    add r10, 4
+    mov r8, 4                                           ; sizeof(int)
+    call setsockopt
+
+    mov rdx, r14        ; r14 = len(*ptr->heap)
+    mov rsi, r13        ; r13 = *ptr->heap
+    mov rdi, r12        ; r12 = fd_client
+    mov rax, 1          ; rax = SYS_write
+    syscall
+
+    ; Devo resettare
+    mov rdi, [fd_sock]                                      ; fd socket server
+    mov dword[rbp + 20], 0                                  ; int on = 0;
+    mov rdi, [fd_sock]                                      ; fd_socket
+    mov rsi, TCP                                            ; Tipo di connessione
+    mov rdx, TCP_NODELAY | SO_REUSEPORT | SO_REUSEADDR
+    mov r10, rbp                                            ; address stack on
+    add r10, 4
+    mov r8, 4                                               ; sizeof(int)
+    call setsockopt
+
+```
 
 ## Attuale tempo di risposta al client
 
-Alla migliore run (**in locale**) impiega 3 millisecondi per ora, ma c'è ancora molto lavoro da fare per renderlo più veloce
+Alla migliore run (**in locale**) impiega dai 1 a 5 ms (casi piu rari), in media 2-3 ms, ma c'è ancora molto lavoro da fare per renderlo più veloce
 
 ## Tags
 
-nasm ld socket bind accept listen read write syscall Linux server OOP C fork do_clone threading html css
+nasm ld socket bind accept listen read write syscall Linux server OOP C fork do_clone threading html css AVX2 x86_64
 
 
 ## Utilities
@@ -815,7 +864,6 @@ nasm ld socket bind accept listen read write syscall Linux server OOP C fork do_
 - [accept](https://man7.org/linux/man-pages/man2/accept.2.html)
 - [fstat](https://man7.org/linux/man-pages/man3/fstat.3p.html)
 - [clone](https://www.ibm.com/docs/en/zos/3.1.0?topic=functions-clone-create-child-process)
-- [asm sqlite3](https://github.com/naga272/5AI/tree/naga272/anagrafica/sqlite_asm)
 
 ## author
 

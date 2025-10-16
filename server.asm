@@ -31,13 +31,14 @@
 %include "./utilities/paths.asm"
 %include "./utilities/net.asm"
 %include "./utilities/sqlite3.asm"
-%include "./rodata_things.asm"
+%include "./utilities/rodata_things.asm"
 
 section .data
 
 argc: dq 0x00
 argv: dq 0x00
 envp: dq 0x00
+fd_sock: dq 0x00
 
 section .bss
     db_obj resq 1
@@ -45,19 +46,85 @@ section .text
 global _start
 
 
+; int && char* && size_t is_cached(char* path)
+is_cached:
+    ; restituisce in rax 0 se e' stato matchato il percorso
+    ; restituisce in rdx il ptr a cached (se rax == 0)
+    ; restituisce in rcx la len di rcx
+    ;
+    ; in caso non trovato restituisce semplicemente -1
+    STARTFOO
+
+    mov rsi, path_index
+    call strcmp
+    je .get_cache_index
+
+    mov rax, -0x01
+    .exit:
+        leave
+        ret
+    .get_cache_index:
+        mov rax, 0x00               ; stato uscita (IMPORTANTE)
+        mov rdx, [cache_index]      ; ptr a heap (char*)
+
+        ; il path potrebbe matchare
+        ; ma potrebbe essere che il ptr e' NULL perche' è la prima chiamata
+        cmp qword[rdx], 0x00
+        jz .not_in_chached
+        mov rcx, [cache_index + 8]  ; len(char*)
+        jmp .exit
+
+    .not_in_chached:
+        mov rax, -0x01
+        jmp .exit
+
+
+; void do_cache(char* path, char* content, size_t len_content)
+do_cache:
+    STARTFOO
+    push r13
+    push rdi
+    push rsi
+    push rdx
+
+    mov rsi, path_index
+    call strcmp
+    cmp rax, 0x00
+    je .set_cache_index
+
+    mov rsi, path_page2
+    call strcmp
+    cmp rax, 0x00
+    je .set_cache_page2
+
+    .end:
+        pop rdi
+        pop r13
+        leave
+        ret
+    .set_cache_index:
+        pop rdx
+        pop rsi
+        mov r13, path_index
+        mov qword[r13], rsi
+        mov qword[r13 + 8], rdx
+        jmp .end
+    .set_cache_page2:
+        pop rdx
+        pop rsi
+        jmp .end
+
+
 ; char* get_content_file(char* path)
 get_content_file:
     ; restituisce un ptr che punta a una zona allocata dinamicamente.
     STARTFOO
     push rdi
-    push rsi 
-    push rdx
+    push rsi
     push r10
     push r11
     push r12
     push r13
-
-    mov r12, 122880
 
     mov rsi, O_RDONLY
     mov rdx, CLASSIS
@@ -67,7 +134,7 @@ get_content_file:
 
     .continue:
         mov r10, rax    ; fd
-        
+
         ; ottengo struct stat
         ; sizeof(struct stat) = 144 + 1 padding (per sicurezza)
         mov rdi, 145
@@ -78,7 +145,8 @@ get_content_file:
         syscall
 
         ; [rax + 0x30] == off_t st_size; // 8 bytes
-        mov rdi, [rsi + 0x30]
+        mov r12, [rsi + 0x30]
+        mov rdi, r12
         call malloc
         mov r13, rax
 
@@ -93,6 +161,7 @@ get_content_file:
         mov rax, 0
         syscall
 
+        mov r11, rax
         mov rdi, r10
         call close
 
@@ -100,11 +169,11 @@ get_content_file:
         ;call print
 
         mov rax, r13
+        mov rdx, r12
         pop r13
         pop r12
         pop r11
         pop r10
-        pop rdx
         pop rsi
         pop rdi
         leave
@@ -126,61 +195,7 @@ get_content_file:
         call _exit
 
 
-; long check_sub_string(char* path, char* substring)
-check_sub_string:
-    STARTFOO
-    push rbx
-    push r12
-    push r13
-
-    mov rbx, rdi        ; rbx = path
-    mov r12, rsi        ; r12 = substring
-    xor rax, rax        ; rax = offset (risultato)
-
-    .outer_loop:
-        mov r13, rbx        ; r13 = current path pointer
-        mov rsi, r12        ; rsi = substring pointer
-
-    .inner_loop:
-        mov dl, [rsi]       ; carica char substring
-        test dl, dl
-        jz .found           ; se fine substring → match trovato
-
-        mov cl, [r13]       ; carica char path
-        test cl, cl
-        jz .not_found       ; fine stringa path → fail
-
-        cmp cl, dl
-        jne .next_char      ; mismatch → ricomincia con path+1
-
-        inc r13
-        inc rsi
-        jmp .inner_loop
-
-    .next_char:
-        inc rbx             ; sposta avanti path
-        inc rax             ; offset++
-        mov cl, [rbx]
-        test cl, cl
-        jz .not_found
-        jmp .outer_loop
-
-    .found:
-        ; offset già in rax
-        jmp .done
-
-    .not_found:
-        mov rax, -1
-
-    .done:
-        pop r13
-        pop r12
-        pop rbx
-        leave
-        ret
-
-
-; char* calculate_response(char* rdi)
+; char* && size_t calculate_response(char* rdi)
 calculate_response:
     ; restituisce un ptr che punta a una zona allocata dinamicamente.
     ; questo ptr ha formattata la response completa da dare al client.
@@ -189,34 +204,15 @@ calculate_response:
     push r13
     push r14
 
-    ; per nessuna ragione al mondo l'utente deve poter inserire roba come
-    ; http://<ip>:<port>/../../file.txt
-    ; mov rdi, r13
-    ; mov rsi, sub_path_for_fuck_me
-    ; call check_sub_string
-    ; mov rsi, path_404
-    ; cmp rax, -1
-
-    ; se rax == -1 -> substring '..' not found -> continua normale
-    ; cmp rax, -1
-    ; je .ok_path
-
-    ; trovata -> forza path_404
-    ; mov rdi, path_404
-
-    ; .ok_path:
-    
     ; mov rdi, path_index
     call get_content_file
     mov r14, rax            ; r14 = content allocato dinamicamente
 
-    mov rdi, r14
-    call strlen
-    mov r13, rax            ; r13 = lunghezza contenuto
-
     ; ===  BUFFER PER RESPONSE  ===
-    mov rdi, 125000           ; header + spazio per content html
-    add rdi, r13
+    mov rdi, rdx            ; len(content html)
+    add rdi, 4096           ; header
+    push rdi                ; len(header + content)
+
     call malloc
     mov r12, rax
 
@@ -275,6 +271,8 @@ calculate_response:
     mov rdi, r14
     call free
 
+    pop rdi
+    mov rdx, rdi
     mov rax, r12
 
     pop r14
@@ -306,10 +304,8 @@ children_handle:
     mov rax, 0
     syscall
 
-    push rdi
     mov rdi, rsi
     call print
-    pop rdi
 
     ; Caso errore non mando nessuna risposta
     test rax, rax
@@ -321,8 +317,9 @@ children_handle:
 
     mov rdi, r13
     call get_path
-
     mov rdi, rax
+    push rdi                ; rbp + 8
+
     mov rsi, home_path
     call strcmp
 
@@ -335,33 +332,65 @@ children_handle:
     ; e quindi non finisce nella cartella templates del progetto
     mov rsi, 46
     call str_prepend
-    
+    push rax                ; rbp + 16
+
     mov r14, rax
     mov rdi, rax
     call calculate_response
 
-    mov rdi, rax
-    call strlen
+    mov r13, rax        ; r13 = *ptr->heap
+    mov r14, rdx        ; r14 = len(*ptr->heap)
 
-    mov rdx, rax 
-    mov rsi, rdi
+    sub rsp, 4
+    mov dword[rbp + 20], 1   ; int on = 1;
+
+    ; WARNING:
+    ; Effetto di questo setsockopt:
+    ;   - Normalmente TCP cerca di accorpare pacchetti piccoli (ad esempio risposte HTTP di pochi byte)
+    ;       per ridurre l’overhead di rete, introducendo un piccolo ritardo in attesa di più dati da inviare insieme.
+    ;   - Con TCP_NODELAY = 1, ordini al kernel di inviare subito ogni pacchetto senza buffering.
+    ; Risultato: Latenza ridotta ma se usato per inviare molti pacchetti piccoli viene ridotta l'efficienza
+    mov rdi, [fd_sock]                                  ; fd socket server
+    mov rsi, TCP                                        ; Tipo di connessione
+    mov rdx, TCP_NODELAY | SO_REUSEPORT | SO_REUSEADDR
+    mov r10, rbp                                        ; address stack on
+    add r10, 4
+    mov r8, 4                                           ; sizeof(int)
+    call setsockopt
+
+    mov rdx, r14 
+    mov rsi, r13
     mov rdi, r12
     mov rax, 1
     syscall
-    
+
+    ; Devo resettare
+    mov rdi, [fd_sock]                                      ; fd socket server
+    mov dword[rbp + 20], 0                                  ; int on = 0;
+    mov rdi, [fd_sock]                                      ; fd_socket
+    mov rsi, TCP                                            ; Tipo di connessione
+    mov rdx, TCP_NODELAY | SO_REUSEPORT | SO_REUSEADDR
+    mov r10, rbp                                            ; address stack on
+    add r10, 4
+    mov r8, 4                                               ; sizeof(int)
+    call setsockopt
+
     .end:
-        ; ripristino heap e stack
-        call free
-
-        mov rdi, r14
-        call free
-
-        mov rdi, r13
-        call free
-
-        ; chiudo fd client
+        ; devo dare priorita' alla chiusara del fd client
+        ; poi il resto
         mov rdi, r12
         call close
+
+        mov rdi, qword[rbp + 16]    ; ptr->heap causato da str_prepend 
+        call free
+
+        mov rdi, r13                ; ptr->heap causato da calculate_response
+        call free
+
+        mov rdi, qword[rbp + 8]     ; ptr->heap causato da get_path
+        call free
+
+        add rsp, 20                 ; libero lo stack
 
         leave
         ret
@@ -387,6 +416,7 @@ main:
     mov rsi, SOCK_STREAM
     mov rdx, TCP
     call socket
+    mov [fd_sock], rax
     mov r9, rax                     ; salvo in r9 il fd
 
     mov rdi, r9                     ; socket fd

@@ -34,11 +34,8 @@ section .data
 section .bss
 section .text
 
-
 ; void *strcat(char *dest, const char *src)
 ; ret: ptr a dest in rax
-global strcat
-
 strcat:
     STARTFOO
 
@@ -108,25 +105,30 @@ add_nl:
     ret
 
 
-; long int strlen(char *rdi)
+; strlen: versione ottimizzata AVX2 per x86-64 (System V ABI)
+; input: RDI -> puntatore a stringa terminata da 0
+; output: RAX = lunghezza (numero di byte prima del byte 0)
+; requisito: CPU con AVX2, NASM/YASM, Linux x86-64
+; note: non salva registri callee-saved (usi caller-saved solo), chiama vzeroupper prima del return.
 strlen:
-    STARTFOO
-    push rdi
-    push rcx
-    
-    mov rcx, -0x01
-    mov al, 0x00
-    cld
-    repne scasb
+    ; rdi = ptr
+    xor     rax, rax            ; offset accumulato (usato come contatore di lunghezza)
+    vxorps  ymm1, ymm1, ymm1    ; ymm1 = 0 (usato per confronto)
 
-    mov rax, rcx 
-    not rax
-    dec rax
+    .loop:
+        vmovdqu ymm0, [rdi + rax]   ; carica 32 byte non-allineati
+        vpcmpeqb ymm2, ymm0, ymm1   ; confronta ogni byte con 0 => byte = 0 ? 0xFF : 0x00
+        vpmovmskb edx, ymm2         ; riduce i 32 byte in una maschera a 32 bit (LSB corrisponde al byte 0)
+        test    edx, edx
+        jnz     .found              ; se qualche zero è presente, trova la posizione
+        add     rax, 32
+        jmp     .loop
 
-    pop rcx
-    pop rdi
-    leave
-    ret
+    .found:
+        bsf     ecx, edx            ; trova l'indice del primo byte zero (0..31)
+        add     rax, rcx            ; lunghezza = offset + indice
+        vzeroupper                  ; evita penalty di transizione AVX->SSE
+        ret
 
 
 ; int strcmp(char*, char*)
