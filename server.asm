@@ -32,6 +32,8 @@
 %include "./utilities/net.asm"
 %include "./utilities/sqlite3.asm"
 %include "./utilities/rodata_things.asm"
+%include "./utilities/cookies.asm"
+
 
 section .data
 
@@ -315,12 +317,17 @@ children_handle:
     ; (rax contiene il no. di bytes letti da fd client)
     mov byte[r13 + rax - 1], 0x00
 
-    mov rdi, r13
+	push r13 		; content fd_client
+    
+	mov rdi, r13
     call get_path
     mov rdi, rax
+
+	pop r13
+
     push rdi                ; rbp + 8
 
-    mov rsi, home_path
+	mov rsi, home_path
     call strcmp
 
     mov rsi, path_index
@@ -401,14 +408,14 @@ main:
     STARTFOO
 
     ; === START SET database ===
-    mov rdi, db_name_file
-    lea rsi, [rel db_obj]
-    call sqlite3_open
+    ;mov rdi, db_name_file
+    ;lea rsi, [rel db_obj]
+    ;call sqlite3_open
 
     ; creo tabella utenti
-    mov rdi, [db_obj]
-    mov rsi, table_user
-    call do_table_sqlite
+    ;mov rdi, [db_obj]
+    ;mov rsi, table_user
+    ;call do_table_sqlite
     ; === END SET database ===
 
     ; ora mi occupo di mettere on il web server

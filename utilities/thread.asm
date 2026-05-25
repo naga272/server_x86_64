@@ -68,7 +68,7 @@ default rel
 %define SIGIO	    29	; I/O ora possibile
 %define SIGPWR	    30	; Guasto di alimentazione
 %define SIGSYS	    31	; Chiamata di sistema non valida
-%define CHILD_STACK_SIZE (16*1024)  ; stack per il figlio
+%define CHILD_STACK_SIZE (16 * 1024)  ; stack per il figlio
 
 
 %define ECHILD -10
@@ -99,22 +99,22 @@ args:
 
 ; sizeof(struct args)
 %define len_struct_args args.end - args ; 88 + padding
-%define off_rdx 0
-%define off_rdi 8 
-%define off_rsi 16
-%define off_r8  24
-%define off_r9  32
-%define off_r10 40
-%define off_r11 48
-%define off_r12 56
-%define off_r13 64
-%define off_r14 72
-%define off_r15 80
-%define __del__ 88
+%define regs_off_rdx 0
+%define regs_off_rdi 8 
+%define regs_off_rsi 16
+%define regs_off_r8  24
+%define regs_off_r9  32
+%define regs_off_r10 40
+%define regs_off_r11 48
+%define regs_off_r12 56
+%define regs_off_r13 64
+%define regs_off_r14 72
+%define regs_off_r15 80
+%define regs__del__ 88
 
 
 section .rodata
-err_clone  db "clone() failed", ENDL, 0
+    err_clone db "clone() failed", ENDL, 0
 
 section .bss
     ; stato terminazione dei figli
@@ -122,9 +122,8 @@ section .bss
 section .text
 
 
-fork: endbr64
-    push rbp
-    mov rbp, rsp
+fork: 
+    STARTFOO
 
     mov rax, 57
     syscall
@@ -136,9 +135,7 @@ fork: endbr64
 ; rdi = funzione da chiamare
 ; rsi = args* (struct con registri/parametri)
 do_clone:
-    endbr64
-    push rbp
-    mov rbp, rsp
+    STARTFOO
 
     mov r15, rdi ; void (*foo)()
     mov r14, rsi ; args*
@@ -193,18 +190,18 @@ do_clone:
         mov     rbx, r14           ; rbx = args*
 
         ; ripristino i registri
-        mov     rdi, [rbx + off_rdi]
-        mov     rsi, [rbx + off_rsi]
-        mov     rdx, [rbx + off_rdx]
-        mov     r8,  [rbx + off_r8]
-        mov     r9,  [rbx + off_r9]
-        mov     r10, [rbx + off_r10]
-        mov     r11, [rbx + off_r11]
-        mov     r12, [rbx + off_r12]
-        mov     r13, [rbx + off_r13]
-        mov     r14, [rbx + off_r14]
-        mov     r15, [rbx + off_r15]
-        mov     rax, [rbx + __del__]   ; rax = args_del (fptr)
+        mov     rdi, [rbx + regs_off_rdi]
+        mov     rsi, [rbx + regs_off_rsi]
+        mov     rdx, [rbx + regs_off_rdx]
+        mov     r8,  [rbx + regs_off_r8]
+        mov     r9,  [rbx + regs_off_r9]
+        mov     r10, [rbx + regs_off_r10]
+        mov     r11, [rbx + regs_off_r11]
+        mov     r12, [rbx + regs_off_r12]
+        mov     r13, [rbx + regs_off_r13]
+        mov     r14, [rbx + regs_off_r14]
+        mov     r15, [rbx + regs_off_r15]
+        mov     rax, [rbx + regs__del__]   ; rax = args_del (fptr)
         
         ; eliminazione oggetto args
         ; in __del__ viene usato rdi
@@ -224,9 +221,7 @@ do_clone:
 
 ; void args_del(args*)
 args_del: 
-    endbr64
-    push rbp
-    mov rbp, rsp
+    STARTFOO
 
     call free
 
@@ -235,13 +230,11 @@ args_del:
 
 
 save_register:
-    endbr64
-    push rbp
-    mov rbp, rsp
+    STARTFOO
 
     mov rdi, len_struct_args
     call calloc ; rax = void*
-    mov qword[rax + __del__], args_del
+    mov qword[rax + regs__del__], args_del
 
     leave
     ret
@@ -249,9 +242,7 @@ save_register:
 
 ; void create_thread(void (*fn)(int, ...), arg1, arg2, arg3, ...)
 create_thread:
-    endbr64
-    push rbp
-    mov rbp, rsp
+    STARTFOO
 
     push rdi
     push rsi
@@ -260,8 +251,10 @@ create_thread:
     push r9
     push r10
     push r11
+
     ; mov rdi, rsi
     call save_register ; rax = register*
+
     pop r11
     pop r10
     pop r9
@@ -272,16 +265,16 @@ create_thread:
 
     ; salvo gli argomenti passati a create_thread per farglieli
     ; eseguire al thread quando entra la funzione
-    mov [rax + off_rdi], rsi
-    mov [rax + off_rsi], rdx
-    mov [rax + off_rdx], r8
-    mov [rax + off_r8], r9
-    mov [rax + off_r9], r10
-    mov [rax + off_r10], r11
-    mov [rax + off_r11], r12
-    mov [rax + off_r12], r13
-    mov [rax + off_r13], r14
-    mov [rax + off_r14], r15
+    mov [rax + regs_off_rdi], rsi
+    mov [rax + regs_off_rsi], rdx
+    mov [rax + regs_off_rdx], r8
+    mov [rax + regs_off_r8], r9
+    mov [rax + regs_off_r9], r10
+    mov [rax + regs_off_r10], r11
+    mov [rax + regs_off_r11], r12
+    mov [rax + regs_off_r12], r13
+    mov [rax + regs_off_r13], r14
+    mov [rax + regs_off_r14], r15
 
     ; do_clone(void (*rdi)(), args* rsi)
     mov rsi, rax
@@ -307,6 +300,7 @@ waitpid:
     pop rdx
     pop rsi
     pop rdi
+
     leave
     ret
 
@@ -326,6 +320,7 @@ waitallpid:
         je .done                ; nessun figlio rimasto
         jmp .loop
     .done:
+
         leave
         ret
 

@@ -70,7 +70,7 @@ mutex_lock:
     STARTFOO
     .spin_try:
         mov eax, 1
-        lock xchg dword [rdi], eax
+        ; lock xchg dword [rdi], eax
         test eax, eax
         jz .got_lock
     ;   old_value != 0

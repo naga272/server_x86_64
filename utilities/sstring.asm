@@ -105,6 +105,7 @@ add_nl:
     ret
 
 
+%ifdef AVX2
 ; strlen: versione ottimizzata AVX2 per x86-64 (System V ABI)
 ; input: RDI -> puntatore a stringa terminata da 0
 ; output: RAX = lunghezza (numero di byte prima del byte 0)
@@ -129,6 +130,22 @@ strlen:
         add     rax, rcx            ; lunghezza = offset + indice
         vzeroupper                  ; evita penalty di transizione AVX->SSE
         ret
+%else
+
+; normal version of strlen
+; size_t strlen(const char* rdi)
+strlen: 
+    STARTFOO
+
+	xor rax, rax
+	.loop: cmp byte[rdi + rax], 0
+		je .end
+		inc rax
+		jmp .loop
+	.end:
+        leave
+		ret
+%endif
 
 
 ; int strcmp(char*, char*)

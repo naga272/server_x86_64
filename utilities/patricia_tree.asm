@@ -90,8 +90,7 @@ global _start
 ; struct_PatriciaNode* create_node(char* prefix, char* value)
 create_node:
     STARTFOO
-    push rbp
-    mov rbp, rsp
+
     push r12
     push r13
     ; rdi = prefix (char*), rsi = value (char* or 0)
@@ -117,29 +116,25 @@ create_node:
     call String
     mov [r15 + off_value], rax
     jmp .cont
-.no_value:
-    mov qword [r15 + off_value], 0
+    .no_value:
+        mov qword [r15 + off_value], 0
 
-.cont:
-    mov qword [r15 + off_children], 0
-    mov qword [r15 + off_child_count], 0
-    mov rax, r15
+    .cont:
+        mov qword [r15 + off_children], 0
+        mov qword [r15 + off_child_count], 0
+        mov rax, r15
 
-    pop r13
-    pop r12
-    pop rbp
-    leave
-    ret
-;
-;
-;
-;
-;
+        pop r13
+        pop r12
+        pop rbp
+        leave
+        ret
+
+
 ; void add_child(PatriciaNode *parent, PatriciaNode *child)
 add_child:
     STARTFOO
-    push rbp
-    mov rbp, rsp
+
     push rbx
     push r12
     push r13
@@ -173,20 +168,21 @@ add_child:
     pop r13
     pop r12
     pop rbx
-    pop rbp
+
     leave
     ret
 
-.oom:
-    ; here just return (no change) — caller must check
-    pop r13
-    pop r12
-    pop rbx
-    pop rbp
-    leave
-    ret
-;
-;
+    .oom:
+        ; here just return (no change) — caller must check
+        pop r13
+        pop r12
+        pop rbx
+
+        leave
+        ret
+
+    
+
 ; size_t common_prefix(const char *a, const char *b)
 ; rdi = char* a
 ; rsi = String* b
@@ -210,9 +206,8 @@ common_prefix:
         pop rbx
         leave
         ret
-;
-;
-;
+
+
 ; void patricia_insert(PatriciaNode *root, char* key, String* value)
 ; PatriciaNode rdi = root
 ; char* rsi = key
@@ -225,8 +220,7 @@ common_prefix:
 patricia_insert:
     STARTFOO
     ; prologo: salvo i callee-saved che uso
-    push rbp
-    mov rbp, rsp
+
     push rbx
     push r12
     push r13
@@ -240,130 +234,130 @@ patricia_insert:
 
     xor rcx, rcx        ; rcx = i = 0 (index)
 
-.for_loop:
-    ; if (i >= root->child_count) goto no_child_match
-    mov rax, [r11 + off_child_count]
-    cmp rcx, rax
-    jae .no_child_match
+    .for_loop:
+        ; if (i >= root->child_count) goto no_child_match
+        mov rax, [r11 + off_child_count]
+        cmp rcx, rax
+        jae .no_child_match
 
-    ; child = root->children[i]
-    mov rax, [r11 + off_children]     ; rax = ptr to array
-    mov r14, [rax + rcx*8]            ; r14 = child
+        ; child = root->children[i]
+        mov rax, [r11 + off_children]     ; rax = ptr to array
+        mov r14, [rax + rcx*8]            ; r14 = child
 
-    ; prefix_len = common_prefix(key, child->prefix->content)
-    mov rdi, r12                       ; arg1 = key (char*)
-    mov rsi, [r14 + off_prefix]        ; rsi = String*
-    mov rsi, [rsi + content]           ; rsi = child->prefix->content (char*)
-    call common_prefix
-    mov rbx, rax                       ; rbx = prefix_len
+        ; prefix_len = common_prefix(key, child->prefix->content)
+        mov rdi, r12                       ; arg1 = key (char*)
+        mov rsi, [r14 + off_prefix]        ; rsi = String*
+        mov rsi, [rsi + content]           ; rsi = child->prefix->content (char*)
+        call common_prefix
+        mov rbx, rax                       ; rbx = prefix_len
 
-    cmp rbx, 0
-    je .next_child                     ; if prefix_len == 0 -> continue
+        cmp rbx, 0
+        je .next_child                     ; if prefix_len == 0 -> continue
 
-    ; len_child_prefix = strlen(child->prefix->content)
-    mov rdi, [r14 + off_prefix]
-    mov rdi, [rdi + content]
-    call strlen
-    mov rdx, rax                       ; rdx = len_child_prefix
+        ; len_child_prefix = strlen(child->prefix->content)
+        mov rdi, [r14 + off_prefix]
+        mov rdi, [rdi + content]
+        call strlen
+        mov rdx, rax                       ; rdx = len_child_prefix
 
-    cmp rbx, rdx
-    jae .no_split                      ; if prefix_len >= len_child_prefix -> no split
+        cmp rbx, rdx
+        jae .no_split                      ; if prefix_len >= len_child_prefix -> no split
 
-    ; ===== SPLIT NODE =====
-    ; create_node(child->prefix->content + prefix_len, child->value ? child->value->content : NULL)
-    ; prepare rdi = child->prefix->content + prefix_len
-    mov rdi, [r14 + off_prefix]
-    mov rdi, [rdi + content]
-    add rdi, rbx                       ; rdi = pointer to suffix
-    ; prepare rsi = child->value ? child->value->content : 0
-    xor rsi, rsi
-    mov rax, [r14 + off_value]
-    test rax, rax
-    jz .skip_value_for_split
-    mov rsi, [rax + content]
-.skip_value_for_split:
-    call create_node                    ; returns new node in rax
-    mov r15, rax                        ; r15 = split node
+        ; ==== SPLIT NODE ====
+        ; create_node(child->prefix->content + prefix_len, child->value ? child->value->content : NULL)
+        ; prepare rdi = child->prefix->content + prefix_len
 
-    ; split->children = child->children
-    mov rax, [r14 + off_children]
-    mov [r15 + off_children], rax
+        mov rdi, [r14 + off_prefix]
+        mov rdi, [rdi + content]
+        add rdi, rbx                       ; rdi = pointer to suffix
 
-    ; split->child_count = child->child_count
-    mov rax, [r14 + off_child_count]
-    mov [r15 + off_child_count], rax
+        ; prepare rsi = child->value ? child->value->content : 0
+        xor rsi, rsi
+        mov rax, [r14 + off_value]
+        test rax, rax
+        jz .skip_value_for_split
+        mov rsi, [rax + content]
 
-    ; truncate original child's prefix: child->prefix->content[prefix_len] = '\0'
-    mov rax, [r14 + off_prefix]
-    mov rax, [rax + content]
-    add rax, rbx
-    mov byte [rax], 0
+    .skip_value_for_split:
+        call create_node                    ; returns new node in rax
+        mov r15, rax                        ; r15 = split node
 
-    ; reset child fields (it becomes internal node)
-    mov qword [r14 + off_children], 0
-    mov qword [r14 + off_child_count], 0
-    mov qword [r14 + off_value], 0
+        ; split->children = child->children
+        mov rax, [r14 + off_children]
+        mov [r15 + off_children], rax
 
-    ; add_child(child, split)
-    mov rdi, r14
-    mov rsi, r15
-    call add_child
+        ; split->child_count = child->child_count
+        mov rax, [r14 + off_child_count]
+        mov [r15 + off_child_count], rax
 
-.no_split:
-    ; len_key = strlen(key)
-    mov rdi, r12
-    call strlen
-    mov rax, rax        ; rax = len_key
+        ; truncate original child's prefix: child->prefix->content[prefix_len] = '\0'
+        mov rax, [r14 + off_prefix]
+        mov rax, [rax + content]
+        add rax, rbx
+        mov byte [rax], 0
 
-    cmp rbx, rax
-    jb .recurse_child   ; if prefix_len < len_key -> recurse into child
+        ; reset child fields (it becomes internal node)
+        mov qword [r14 + off_children], 0
+        mov qword [r14 + off_child_count], 0
+        mov qword [r14 + off_value], 0
 
-    ; else exact match (prefix_len >= len_key) -> set child->value = String(value)
-    mov rdi, r13        ; rdi = value (char* or String arg depending on your String constructor)
-    call String
-    mov [r14 + off_value], rax
-    jmp .done
+        ; add_child(child, split)
+        mov rdi, r14
+        mov rsi, r15
+        call add_child
 
-.recurse_child:
-    ; patricia_insert(child, key + prefix_len, value)
-    mov rdi, r14
-    mov rsi, r12
-    add rsi, rbx
-    mov rdx, r13
-    call patricia_insert
-    jmp .done
+    .no_split:
+        ; len_key = strlen(key)
+        mov rdi, r12
+        call strlen
+        mov rax, rax        ; rax = len_key
 
-.next_child:
-    inc rcx
-    jmp .for_loop
+        cmp rbx, rax
+        jb .recurse_child   ; if prefix_len < len_key -> recurse into child
 
-.no_child_match:
-    ; add_child(root, create_node(key, value))
-    ; we clobbered rdi earlier, restore from r11
-    push r11             ; salva root (r11) sullo stack temporaneamente
-    mov rdi, r12         ; arg1 = key
-    mov rsi, r13         ; arg2 = value
-    call create_node     ; returns node* in rax
-    mov rsi, rax         ; rsi = new node pointer for add_child
-    pop rdi              ; rdi = root (originario)
-    call add_child
-    ; dopo add_child continui e poi usciamo
+        ; else exact match (prefix_len >= len_key) -> set child->value = String(value)
+        mov rdi, r13        ; rdi = value (char* or String arg depending on your String constructor)
+        call String
+        mov [r14 + off_value], rax
+        jmp .done
 
-.done:
-    ; epilogo
-    pop r15
-    pop r14
-    pop r13
-    pop r12
-    pop rbx
-    pop rbp
-    leave
-    ret
-;
-;
-;
-;
-;
+    .recurse_child:
+        ; patricia_insert(child, key + prefix_len, value)
+        mov rdi, r14
+        mov rsi, r12
+        add rsi, rbx
+        mov rdx, r13
+        call patricia_insert
+        jmp .done
+
+    .next_child:
+        inc rcx
+        jmp .for_loop
+
+    .no_child_match:
+        ; add_child(root, create_node(key, value))
+        ; we clobbered rdi earlier, restore from r11
+        push r11             ; salva root (r11) sullo stack temporaneamente
+        mov rdi, r12         ; arg1 = key
+        mov rsi, r13         ; arg2 = value
+        call create_node     ; returns node* in rax
+        mov rsi, rax         ; rsi = new node pointer for add_child
+        pop rdi              ; rdi = root (originario)
+        call add_child
+        ; dopo add_child continui e poi usciamo
+
+    .done:
+        ; epilogo
+        pop r15
+        pop r14
+        pop r13
+        pop r12
+        pop rbx
+
+        leave
+        ret
+
+
 ; String* patricia_search(PatriciaNode *root, const char *key)
 patricia_search:
     STARTFOO
@@ -380,83 +374,77 @@ patricia_search:
     mov r12, rdi               ; root
     mov r13, rsi               ; key
 
-.main_for:
-    cmp rcx, [r12 + off_child_count]
-    jae .done                   ; fine for
+    .main_for:
+        cmp rcx, [r12 + off_child_count]
+        jae .done                   ; fine for
 
-    mov r14, [r12 + off_children]
-    mov r14, [r14 + rcx*8]      ; child = root->children[i]
+        mov r14, [r12 + off_children]
+        mov r14, [r14 + rcx*8]      ; child = root->children[i]
 
-    ; prefix_len = common_prefix(key, child->prefix)
-    mov rdi, r13
-    mov rsi, [r14 + off_prefix]
-    mov rsi, [rsi + content]
-    call common_prefix
-    mov r11, rax                ; prefix_len
+        ; prefix_len = common_prefix(key, child->prefix)
+        mov rdi, r13
+        mov rsi, [r14 + off_prefix]
+        mov rsi, [rsi + content]
+        call common_prefix
+        mov r11, rax                ; prefix_len
 
-    cmp r11, 0
-    je .next_child               ; if (prefix_len == 0) continue;
+        cmp r11, 0
+        je .next_child               ; if (prefix_len == 0) continue;
 
-    ; if (prefix_len == strlen(key))
-    mov rdi, r13
-    call strlen
-    cmp r11, rax
-    jne .else_if
+        ; if (prefix_len == strlen(key))
+        mov rdi, r13
+        call strlen
+        cmp r11, rax
+        jne .else_if
 
-    ; if (prefix_len == strlen(child->prefix))
-    mov rdi, [r14 + off_prefix]
-    mov rdi, [rdi + content]
-    call strlen
-    cmp r11, rax
-    jne .else_if
+        ; if (prefix_len == strlen(child->prefix))
+        mov rdi, [r14 + off_prefix]
+        mov rdi, [rdi + content]
+        call strlen
+        cmp r11, rax
+        jne .else_if
 
-    mov rax, [r14 + off_value]   ; return child->value
-    jmp .done
+        mov rax, [r14 + off_value]   ; return child->value
+        jmp .done
 
-.else_if:
-    mov rdi, [r14 + off_prefix]
-    mov rdi, [rdi + content]
-    call strlen
-    cmp r11, rax
-    jb .return_null              ; if (prefix_len < strlen(prefix)) return NULL;
+    .else_if:
+        mov rdi, [r14 + off_prefix]
+        mov rdi, [rdi + content]
+        call strlen
+        cmp r11, rax
+        jb .return_null              ; if (prefix_len < strlen(prefix)) return NULL;
 
-    ; else → ricorsione
-    mov rdi, r14
-    mov rsi, r13
-    add rsi, r11
-    call patricia_search
-    jmp .done
+        ; else → ricorsione
+        mov rdi, r14
+        mov rsi, r13
+        add rsi, r11
+        call patricia_search
+        jmp .done
 
-.return_null:
-    xor rax, rax
-    jmp .done
+    .return_null:
+        xor rax, rax
+        jmp .done
 
-.next_child:
-    inc rcx
-    jmp .main_for
+    .next_child:
+        inc rcx
+        jmp .main_for
 
-.done:
-    pop r14
-    pop r13
-    pop r12
-    pop r11
-    pop rcx
-    pop rsi
-    pop rdi
-    leave
-    ret
-;
-;
-;
-;
-;
+    .done:
+        pop r14
+        pop r13
+        pop r12
+        pop r11
+        pop rcx
+        pop rsi
+        pop rdi
+        leave
+        ret
+
 
 section .data
     root dq 0x00
-    home 
-;
-;
-;
+
+
 main:
     STARTFOO
     
