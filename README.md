@@ -343,7 +343,33 @@ accept: ; quando arriva una richiesta, accept restituisce un nuovo fd
 La syscall per accept è la numero 43 e una volta chiamata, il programma si blocca al punto del codice **syscall**.
 Quando invece si connette il client, la syscall restituisce un file descriptor che ha come valore >= 0, < 0 in caso di errore.
 
-Questo file descriptor consente di avere delle informazioni utili come per esempio il percorso che l'utente ha richiesto. Es di contenuto del fd:
+Questo file descriptor consente di avere delle informazioni utili sul client e su quello che ha richiesto.
+
+Il contenuto del fd è suddiviso in request header e il body, 
+Questi due si possono distinguere tramite i caratteri `\n\n`:
+
+[**request header**]`\n\n`[**body**]
+
+osserviamo i campi della request header più importanti.
+
+- La prima riga, detta `Request Line`, definisce l'azione da compiere.
+ - - E' composta da:
+  - - - `metodo`: indica l'operazione richiesta (GET, POST, DELETE, ...)
+  - - - `Percorso/URI`: percorso della risorsa specificata (index.html, etc..)
+  - - - `Versione HTTP`: differiscono in efficienza e velocità (**http1.1** standard, **http2**, **http3**)
+- `Host`: dice ip + porta richiesti dal client
+- `sec-ch-ua-platform`: sistema operativo del client
+- `sec-ch-ua`: nome del client web usato dal client
+
+Il corpo del body, invece contiene informazioni di un possibile form con azione di tipo POST.
+
+Es:
+
+```
+username=Lorem&password=Ipsum
+```
+
+Es reale del contenuto del fd del client:
 
 ```txt
 GET / HTTP/1.1
@@ -386,10 +412,9 @@ mov r10, rax ; passo il fd del client restituito dalla syscall nel registro r10
 Fatto questo, devo usare il multithreading, questo perchè fintantochè il processo figlio elabora la risposta da dare al singolo client, il server deve ritornare subito nella funzione accept() per accettare altri client, altrimenti gli altri non possono fare richieste.
 Per fare questo, ho creato un modulo assembly chiamato thread.asm, che al suo interno contiene le seguenti funzioni:
 
-- create_thread: crea un processo figlio che condivide la memoria col padre.
-        il prototype è:
+- create_thread: crea un processo figlio che condivide la memoria col padre. Il prototype è:
 
-```C        
+```C
 void create_thread(int (fn*)(), ...);
 ```
 
@@ -437,7 +462,10 @@ response:
 ```
 
 Dove ENDL è una macro che viene sostituita da i caratteri \r e \n (0x0d, 0x0a).
-**NB**: LA STRUTTURA DEVE AVERE QUESTO FORMATO, E' IMPORTANTISSIMO ALTRIMENTI NON FUNZIONERA'. MI RACCOMANDO, RISPETTA **TUTTI I NEW LINE**. 
+
+**NB**: LA STRUTTURA DEVE AVERE QUESTO FORMATO, E' IMPORTANTISSIMO ALTRIMENTI NON FUNZIONERA'. 
+
+MI RACCOMANDO, BISOGNA RISPETTARE **TUTTI I NEW LINE**. 
 
 ## close
 
@@ -460,7 +488,7 @@ Il processo figlio ha il compito di:
 - restituire la risposta al client
 - liberare la memoria
 
-per formattare la risposta da inviare al client, ho creato la funzione calculate_response, che prende come parametro il file descriptor del client e restituisce un ptr che punta a una zona allocata dinamicamente:
+Per formattare la risposta da inviare al client, ho creato la funzione calculate_response, che prende come parametro il file descriptor del client e restituisce un ptr che punta a una zona allocata dinamicamente:
 
 ```asm
 ; char* && size_t calculate_response(char* rdi)
@@ -568,9 +596,12 @@ Analisi step by step:
         ; ...
 ```
 
-La funzione open (descritta in stdlib.asm) restituisce -1 nel caso in cui è avvenuto un errore, altriementi resgtituisce un fd > 3 se tutto ok. In questo contesto, se rax == -1, il programma finisce nel branch ```.page_not_found```, creando il fd per la pagina chiamata "page404.html", e ritorna al branch ```.continue```.
+La funzione open (descritta in stdlib.asm) restituisce -1 nel caso in cui è avvenuto un errore, altriementi restituisce un fd > 3 se tutto ok.
+
+In questo contesto, se rax == -1, il programma finisce nel branch ```.page_not_found```, creando il fd per la pagina chiamata "page404.html", e ritorna al branch ```.continue```.
 
 Ora, ho bisogno di sapere della grandezza del file, così posso allocare precisamente il numero di bytes che mi servono per contenere tutto il contenuto del file.
+
 Linux mette a disposizione la syscall no. 5, ```sys_fstat``` che passando il fd, un buffer che contiene la ```struct stat``` restituisce tutte le caratteristiche del file, compreso la sua grandezza.
 
 ```c
@@ -848,7 +879,7 @@ E' possibile ridurre la latenza usando la syscall setsockopt, passando il flag T
 
 ## Attuale tempo di risposta al client
 
-Alla migliore run (**in locale**) impiega dai 1 a 5 ms (casi piu rari), in media 2-3 ms, ma c'è ancora molto lavoro da fare per renderlo più veloce
+Alla migliore run (**in locale**) impiega dai 0 a 3/4 ms (il client approssima i microsecondi in ms, quindi se fa un tempo inferiore a 500 microsecondi mostra 0), in media 1-3 ms, ma c'è ancora molto lavoro da fare per renderlo più veloce
 
 ## Tags
 
