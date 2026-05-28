@@ -407,11 +407,6 @@ children_handle:
 main:
     STARTFOO
 
-    ; === START SET database ===
-    ;mov rdi, db_name_file
-    ;lea rsi, [rel db_obj]
-    ;call sqlite3_open
-
     ; creo tabella utenti
     ;mov rdi, [db_obj]
     ;mov rsi, table_user
@@ -455,10 +450,6 @@ main:
 
         pop r9
         jmp .loop
-
-    ; sqlite3_close(db_obj)
-    mov rdi, [db_obj]
-    call sqlite3_close
 
     mov rax, 0
     leave
