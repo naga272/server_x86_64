@@ -30,7 +30,7 @@
 %include "./utilities/stdio.asm"
 %include "./utilities/paths.asm"
 %include "./utilities/net.asm"
-%include "./utilities/sqlite3.asm"
+; %include "./utilities/sqlite3.asm"
 %include "./utilities/rodata_things.asm"
 %include "./utilities/cookies.asm"
 
