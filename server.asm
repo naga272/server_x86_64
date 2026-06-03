@@ -442,16 +442,17 @@ main:
         call accept     ; int new_fd = accept(fd_sock, NULL, NULL);
 
         test rax, rax
-        js .loop        ; skip se accept fallisce
+        js .continue        ; skip se accept fallisce
 
         mov rdi, children_handle
         mov rdx, rax
         call create_thread
 
-        pop r9
-        jmp .loop
+	.continue:
+		pop r9
+		jmp .loop
 
-    mov rax, 0
+	mov rax, 0
     leave
     ret
 
