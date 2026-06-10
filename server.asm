@@ -371,6 +371,13 @@ children_handle:
     mov rax, 1
     syscall
 
+    ; devo dare priorita' alla chiusara del fd client
+    ; perche' il client rimane in attesa della chiusura.
+    ; poi il resto (libero memoria, ripristino il settaggio
+    ; del socket del server e uccido il thread)
+    mov rdi, r12
+    call close
+
     ; Devo resettare
     mov rdi, [fd_sock]                                      ; fd socket server
     mov dword[rbp + 20], 0                                  ; int on = 0;
@@ -383,10 +390,6 @@ children_handle:
     call setsockopt
 
     .end:
-        ; devo dare priorita' alla chiusara del fd client
-        ; poi il resto
-        mov rdi, r12
-        call close
 
         mov rdi, qword[rbp + 16]    ; ptr->heap causato da str_prepend 
         call free

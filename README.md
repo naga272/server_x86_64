@@ -13,7 +13,50 @@ Lo scopo di questo progetto è capire sul serio come funziona un server web, and
 
 Online si trova tanta roba, ma spesso è confusa, astratta o semplicemente scritta da chi non ha mai davvero messo le mani nel silicio o guardato cosa succede davvero quando una richiesta HTTP arriva.
 
-Personalmente mi ha sempre fatto incazzare il fatto che nessuno spiega chiaramento cosa succede al livello del silicio, quindi ho deciso di scrivermelo da solo nel tentativo di aiutare anche altre persone che sono curiose a capire meglio.
+
+Diagramma architettura progetto:
+
+```
+
+   creazione fd socket server
+            |
+            V
+  bind fd server con ip e porta
+            |
+            V
+      settaggio listen
+            |
+            V
+--->accept (restituisce fd client)
+|           |
+|           V
+|       create_thread **clone**
+|         |    \
+|-while 1-|     \
+                 \
+                  |
+                  V
+           thread parsifica richiesta fd client
+                  |
+                  V
+                esegue routing 
+        (verifica esistenza file richiesto)
+                  |
+                  V
+        formatta risposta (header + body)
+                  |
+                  V
+        write fd client (manda risposta al client)
+                  |
+                  V
+        chiusura fd client
+                  |
+                  V
+        pulizia stack/heap usato dal thread
+                  |
+                  V
+               return
+```
 
 ## **Requisiti**
 
@@ -844,7 +887,7 @@ le istruzioni della famiglia AVX2
 
 ## Altri tipi di ottimizzazioni
 
-E' possibile ridurre la latenza usando la syscall setsockopt, passando il flag TCP_NODEALY:
+E' possibile ridurre la latenza usando la syscall setsockopt, passando il flag TCP_NODELAY:
 
 ```asm
     sub rsp, 4
@@ -864,6 +907,13 @@ E' possibile ridurre la latenza usando la syscall setsockopt, passando il flag T
     mov rax, 1          ; rax = SYS_write
     syscall
 
+    ; devo dare priorita' alla chiusara del fd client
+    ; perche' il client rimane in attesa della chiusura.
+    ; poi il resto (libero memoria, ripristino il settaggio
+    ; del socket del server e termino il thread)
+    mov rdi, r12
+    call close
+
     ; Devo resettare
     mov rdi, [fd_sock]                                      ; fd socket server
     mov dword[rbp + 20], 0                                  ; int on = 0;
@@ -879,7 +929,27 @@ E' possibile ridurre la latenza usando la syscall setsockopt, passando il flag T
 
 ## Attuale tempo di risposta al client
 
-Alla migliore run (**in locale**) impiega dai 0 a 3/4 ms (il client approssima i microsecondi in ms, quindi se fa un tempo inferiore a 500 microsecondi mostra 0), in media 1-3 ms, ma c'è ancora molto lavoro da fare per renderlo più veloce
+Ho fatto diversi test tentando di restituire la stessa pagina web usando più framework e web client e cronometrando quando tempo ci impiega il client a ottenere e visualizzare la risposta
+
+**NB**: Ho preso i tempi migliori fatti da tutti i tipi di server web nel restituire la stessa pagina
+
+|              | Chrome  | Firefox | Opera Gx |
+|--------------|---------|---------|----------|
+|**server asm**| 0.36 ms | 1ms     |  0.67 ms |
+|**apache**    | 0.64 ms | 1ms     |  0.63 ms |
+|**django**    | 1.02 ms | 1ms     |  1.26 ms |
+|**spring**    | 1.82 ms | 2ms     |  2.02 ms |
+
+
+Dettagli tempo con ```Chrome``` (**server assembly**):
+![tempo chrome](./screen_time/server_asm_chrome.png)
+
+Dettagli tempo con ```Firefox``` (**server assembly**):
+![tempo chrome](./screen_time/server_asm_firefox.png)
+
+Dettagli tempo con ```OperaGx``` (**server assembly**):
+![tempo chrome](./screen_time/server_asm_opera_gx.png)
+
 
 ## Tags
 

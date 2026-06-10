@@ -46,7 +46,7 @@
 
 section .rodata
     neg_res_sock            db "errore nel tantito di creare una socket", ENDL, 0x00
-    neg_res_bind            db "errore durante la fase di binding", ENDL, 0x00
+    neg_res_bind            db "errore durante la fase di binding (porta occupata)", ENDL, 0x00
     neg_res_listen          db "errore nel tentativo di mettersi in ascolto", ENDL, 0x00
     neg_res_accept          db "Impossibile accettare la connessione", ENDL, 0x00
     neg_res_fd_client       db "impossibile leggere il contenuto del fd del client", ENDL, 0x00    
